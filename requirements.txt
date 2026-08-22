@@ -1,0 +1,6 @@
+# Dependencias de ejecucion del compilador de Compiscript
+antlr4-python3-runtime==4.13.1
+flask>=3.0
+
+# Dependencias de desarrollo (bateria de tests)
+pytest>=8.0

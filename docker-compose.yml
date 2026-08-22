@@ -1,0 +1,35 @@
+# Servicios del proyecto Compiscript.
+#
+#   docker compose up ide        -> IDE web en http://localhost:5000
+#   docker compose run --rm test -> bateria de tests
+#   docker compose run --rm cli programa.cps
+services:
+
+  ide:
+    build: .
+    image: compiscript
+    command: ide
+    ports:
+      - "5000:5000"
+    volumes:
+      # Se monta el codigo para poder editarlo sin reconstruir la imagen.
+      - ./src:/app/src:ro
+      - ./ide:/app/ide:ro
+      - ./grammar:/app/grammar:ro
+
+  test:
+    build: .
+    image: compiscript
+    command: test
+    volumes:
+      - ./src:/app/src:ro
+      - ./tests:/app/tests:ro
+
+  cli:
+    build: .
+    image: compiscript
+    command: ["cli", "--help"]
+    volumes:
+      # El directorio actual queda accesible en /trabajo dentro del contenedor.
+      - .:/trabajo
+    working_dir: /trabajo

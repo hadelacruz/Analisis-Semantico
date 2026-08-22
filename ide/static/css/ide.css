@@ -1,0 +1,506 @@
+/* ==========================================================================
+   IDE de Compiscript — hoja de estilos
+   Distribucion: barra superior / editor + panel lateral / panel inferior /
+   barra de estado. Los tamanos de los paneles se ajustan arrastrando los
+   separadores (ver ide.js).
+   ========================================================================== */
+
+:root {
+  --alto-barra: 52px;
+  --alto-estado: 26px;
+  --ancho-lateral: 420px;
+  --alto-inferior: 200px;
+
+  --fondo: #1e1e2e;
+  --fondo-2: #181825;
+  --fondo-3: #11111b;
+  --panel: #232336;
+  --borde: #313244;
+  --texto: #cdd6f4;
+  --texto-2: #a6adc8;
+  --texto-3: #6c7086;
+  --acento: #89b4fa;
+  --acento-2: #74c7ec;
+  --error: #f38ba8;
+  --aviso: #f9e2af;
+  --ok: #a6e3a1;
+  --violeta: #cba6f7;
+  --naranja: #fab387;
+  --mono: "JetBrains Mono", "Cascadia Code", "Fira Code", Consolas, "Courier New", monospace;
+  --sans: "Segoe UI", system-ui, -apple-system, sans-serif;
+}
+
+html[data-tema="claro"] {
+  --fondo: #ffffff;
+  --fondo-2: #f4f4f8;
+  --fondo-3: #eaeaf0;
+  --panel: #fbfbfd;
+  --borde: #d8d8e0;
+  --texto: #1e1e2e;
+  --texto-2: #4c4f69;
+  --texto-3: #8c8fa1;
+  --acento: #1e66f5;
+  --acento-2: #209fb5;
+  --error: #d20f39;
+  --aviso: #b8860b;
+  --ok: #40a02b;
+  --violeta: #8839ef;
+  --naranja: #fe640b;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  height: 100%;
+  margin: 0;
+  background: var(--fondo);
+  color: var(--texto);
+  font-family: var(--sans);
+  font-size: 13px;
+  overflow: hidden;
+}
+
+/* El editor ocupa el espacio sobrante; el panel inferior nunca se queda con
+   mas del 45% de la altura, para que en pantallas bajas siga viendose codigo. */
+body {
+  display: grid;
+  grid-template-rows:
+    var(--alto-barra)
+    minmax(0, 1fr)
+    5px
+    min(var(--alto-inferior), 45vh)
+    var(--alto-estado);
+}
+
+/* --- barra superior ------------------------------------------------------ */
+
+.barra {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 0 14px;
+  background: var(--fondo-2);
+  border-bottom: 1px solid var(--borde);
+}
+
+.marca { display: flex; align-items: center; gap: 10px; }
+.marca .logo { font-size: 22px; }
+.marca strong { display: block; font-size: 14px; letter-spacing: .2px; }
+.marca small { display: block; color: var(--texto-3); font-size: 11px; }
+
+.acciones { display: flex; align-items: center; gap: 8px; }
+
+.btn {
+  background: var(--panel);
+  color: var(--texto);
+  border: 1px solid var(--borde);
+  border-radius: 6px;
+  padding: 6px 12px;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background .12s, border-color .12s;
+}
+.btn:hover { background: var(--fondo-3); border-color: var(--acento); }
+.btn:active { transform: translateY(1px); }
+
+.btn-primario {
+  background: var(--acento);
+  border-color: var(--acento);
+  color: var(--fondo-3);
+  font-weight: 600;
+}
+.btn-primario:hover { filter: brightness(1.1); background: var(--acento); }
+.btn-primario span { font-size: 10px; }
+
+.btn-icono { padding: 6px 9px; }
+.btn-mini { padding: 3px 8px; font-size: 11px; }
+
+.control {
+  background: var(--panel);
+  color: var(--texto);
+  border: 1px solid var(--borde);
+  border-radius: 6px;
+  padding: 6px 8px;
+  font: inherit;
+  font-size: 12px;
+}
+.control:focus { outline: none; border-color: var(--acento); }
+
+.interruptor {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  color: var(--texto-2);
+  cursor: pointer;
+  user-select: none;
+}
+.interruptor input { accent-color: var(--acento); cursor: pointer; }
+.interruptor.mini { font-size: 11px; }
+
+/* --- area central -------------------------------------------------------- */
+
+.area {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 5px min(var(--ancho-lateral), 45vw);
+  min-height: 0;
+  overflow: hidden;
+}
+
+.panel-editor,
+.panel-lateral {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  background: var(--fondo);
+}
+
+.panel-lateral { background: var(--fondo-2); border-left: 1px solid var(--borde); }
+
+.cabecera-panel {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 12px;
+  background: var(--fondo-2);
+  border-bottom: 1px solid var(--borde);
+  font-size: 12px;
+}
+
+.titulo-panel { display: flex; align-items: center; gap: 6px; font-weight: 600; }
+.punto-sucio { color: var(--naranja); font-size: 10px; }
+.meta { color: var(--texto-3); font-size: 11px; font-family: var(--mono); }
+
+#editor { flex: 1; min-height: 0; }
+
+/* --- separadores redimensionables ---------------------------------------- */
+
+.separador-vertical,
+.separador-horizontal {
+  background: var(--borde);
+  transition: background .12s;
+}
+.separador-vertical { cursor: col-resize; }
+.separador-horizontal { cursor: row-resize; }
+.separador-vertical:hover,
+.separador-horizontal:hover { background: var(--acento); }
+
+/* --- pestanas ------------------------------------------------------------ */
+
+.pestanas {
+  display: flex;
+  gap: 2px;
+  padding: 0 6px;
+  background: var(--fondo-3);
+  border-bottom: 1px solid var(--borde);
+  flex-shrink: 0;
+}
+
+.pestana {
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--texto-3);
+  padding: 8px 12px;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.pestana:hover { color: var(--texto); }
+.pestana.activa { color: var(--acento); border-bottom-color: var(--acento); }
+
+.insignia {
+  background: var(--borde);
+  color: var(--texto-2);
+  border-radius: 9px;
+  padding: 1px 7px;
+  font-size: 10px;
+  font-weight: 600;
+}
+.insignia.hay-errores { background: var(--error); color: var(--fondo-3); }
+.insignia.hay-avisos { background: var(--aviso); color: var(--fondo-3); }
+
+.contenido-lateral,
+.contenido-inferior { flex: 1; min-height: 0; position: relative; }
+
+.vista {
+  display: none;
+  position: absolute;
+  inset: 0;
+  flex-direction: column;
+  min-height: 0;
+}
+.vista.activa { display: flex; }
+
+.herramientas {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--borde);
+  flex-shrink: 0;
+}
+.herramientas .control { flex: 1; padding: 4px 8px; }
+
+.scroll { flex: 1; overflow: auto; min-height: 0; }
+.scroll::-webkit-scrollbar { width: 10px; height: 10px; }
+.scroll::-webkit-scrollbar-thumb { background: var(--borde); border-radius: 5px; }
+.scroll::-webkit-scrollbar-thumb:hover { background: var(--texto-3); }
+
+/* --- arbol sintactico ---------------------------------------------------- */
+
+#arbol { padding: 8px 6px; font-family: var(--mono); font-size: 12px; }
+
+.nodo { position: relative; }
+.nodo-linea {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+  padding: 1px 4px;
+  border-radius: 4px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.nodo-linea:hover { background: var(--fondo-3); }
+
+.flecha {
+  width: 12px;
+  flex-shrink: 0;
+  color: var(--texto-3);
+  transition: transform .12s;
+  display: inline-block;
+  text-align: center;
+}
+.nodo.colapsado > .nodo-linea .flecha { transform: rotate(-90deg); }
+.nodo.colapsado > .hijos { display: none; }
+.flecha.vacia { visibility: hidden; }
+
+.etiqueta-regla { color: var(--acento); }
+.etiqueta-token { color: var(--naranja); }
+.etiqueta-error { color: var(--error); text-decoration: underline wavy; }
+.tipo-nodo {
+  color: var(--ok);
+  font-size: 10px;
+  background: color-mix(in srgb, var(--ok) 14%, transparent);
+  border-radius: 3px;
+  padding: 0 4px;
+}
+.pos-nodo { color: var(--texto-3); font-size: 10px; }
+
+.hijos {
+  margin-left: 10px;
+  padding-left: 8px;
+  border-left: 1px dotted var(--borde);
+}
+
+/* --- tabla de simbolos --------------------------------------------------- */
+
+#simbolos { padding: 6px; }
+
+.ambito {
+  border: 1px solid var(--borde);
+  border-radius: 8px;
+  margin-bottom: 8px;
+  overflow: hidden;
+  background: var(--panel);
+}
+
+.ambito-cabecera {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  background: var(--fondo-3);
+  cursor: pointer;
+  font-size: 12px;
+}
+.ambito-cabecera:hover { background: var(--borde); }
+.ambito.colapsado .ambito-cuerpo { display: none; }
+.ambito.colapsado .flecha { transform: rotate(-90deg); }
+
+.chip {
+  font-size: 10px;
+  padding: 1px 7px;
+  border-radius: 9px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: .3px;
+}
+.chip-global { background: color-mix(in srgb, var(--acento) 22%, transparent); color: var(--acento); }
+.chip-funcion { background: color-mix(in srgb, var(--ok) 22%, transparent); color: var(--ok); }
+.chip-clase { background: color-mix(in srgb, var(--violeta) 22%, transparent); color: var(--violeta); }
+.chip-bloque { background: color-mix(in srgb, var(--naranja) 22%, transparent); color: var(--naranja); }
+
+.ambito-nombre { font-family: var(--mono); font-weight: 600; }
+.ambito-meta { margin-left: auto; color: var(--texto-3); font-size: 10px; font-family: var(--mono); }
+
+.ambito-cuerpo { padding: 0; }
+.ambito-anidados { padding: 0 8px 8px 18px; }
+
+table.simbolos {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: var(--mono);
+  font-size: 11px;
+}
+table.simbolos th {
+  text-align: left;
+  color: var(--texto-3);
+  font-weight: 600;
+  padding: 5px 8px;
+  border-bottom: 1px solid var(--borde);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: .4px;
+  position: sticky;
+  top: 0;
+  background: var(--panel);
+}
+table.simbolos td { padding: 4px 8px; border-bottom: 1px solid color-mix(in srgb, var(--borde) 50%, transparent); }
+table.simbolos tr:last-child td { border-bottom: none; }
+table.simbolos tr:hover td { background: var(--fondo-3); }
+
+.col-nombre { color: var(--texto); font-weight: 600; }
+.col-tipo { color: var(--acento-2); }
+.col-cat { color: var(--violeta); }
+.col-num { color: var(--texto-3); text-align: right; }
+.nota {
+  display: inline-block;
+  font-size: 9px;
+  padding: 0 5px;
+  border-radius: 3px;
+  margin-right: 3px;
+  background: var(--borde);
+  color: var(--texto-2);
+}
+.nota-capturada { background: color-mix(in srgb, var(--violeta) 25%, transparent); color: var(--violeta); }
+.nota-recursiva { background: color-mix(in srgb, var(--ok) 25%, transparent); color: var(--ok); }
+.nota-closure { background: color-mix(in srgb, var(--acento) 25%, transparent); color: var(--acento); }
+.nota-aviso { background: color-mix(in srgb, var(--aviso) 25%, transparent); color: var(--aviso); }
+
+/* --- tokens y reglas ----------------------------------------------------- */
+
+table.rejilla {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11px;
+  font-family: var(--mono);
+}
+table.rejilla th {
+  position: sticky;
+  top: 0;
+  background: var(--fondo-3);
+  text-align: left;
+  padding: 6px 10px;
+  color: var(--texto-3);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: .4px;
+  border-bottom: 1px solid var(--borde);
+}
+table.rejilla td { padding: 4px 10px; border-bottom: 1px solid color-mix(in srgb, var(--borde) 45%, transparent); }
+table.rejilla tr:hover td { background: var(--fondo-3); }
+.tipo-token { color: var(--violeta); }
+.texto-token { color: var(--naranja); }
+.codigo-regla { color: var(--acento); font-weight: 600; }
+.codigo-regla.aviso { color: var(--aviso); }
+
+/* --- panel inferior: problemas ------------------------------------------- */
+
+.panel-inferior {
+  display: flex;
+  flex-direction: column;
+  background: var(--fondo-2);
+  border-top: 1px solid var(--borde);
+  min-height: 0;
+}
+
+#problemas { padding: 4px 0; }
+
+.problema {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  padding: 6px 12px;
+  cursor: pointer;
+  border-left: 3px solid transparent;
+}
+.problema:hover { background: var(--fondo-3); }
+.problema.error { border-left-color: var(--error); }
+.problema.warning { border-left-color: var(--aviso); }
+
+.icono-problema { font-size: 12px; line-height: 1.4; flex-shrink: 0; }
+.problema.error .icono-problema { color: var(--error); }
+.problema.warning .icono-problema { color: var(--aviso); }
+
+.cuerpo-problema { flex: 1; min-width: 0; }
+.mensaje-problema { color: var(--texto); line-height: 1.45; }
+.detalle-problema {
+  display: flex;
+  gap: 10px;
+  margin-top: 2px;
+  font-size: 10px;
+  font-family: var(--mono);
+  color: var(--texto-3);
+}
+.codigo-problema {
+  font-weight: 700;
+  font-family: var(--mono);
+  font-size: 11px;
+  flex-shrink: 0;
+  padding-top: 1px;
+}
+.problema.error .codigo-problema { color: var(--error); }
+.problema.warning .codigo-problema { color: var(--aviso); }
+
+.vacio {
+  padding: 22px 16px;
+  text-align: center;
+  color: var(--texto-3);
+  font-size: 12px;
+}
+.vacio .grande { display: block; font-size: 26px; margin-bottom: 6px; }
+
+.consola {
+  margin: 0;
+  padding: 10px 12px;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  line-height: 1.55;
+  color: var(--texto-2);
+  white-space: pre-wrap;
+}
+
+/* --- barra de estado ----------------------------------------------------- */
+
+.barra-estado {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 12px;
+  background: var(--fondo-3);
+  border-top: 1px solid var(--borde);
+  font-size: 11px;
+  color: var(--texto-3);
+}
+.barra-estado .crece { flex: 1; }
+.separador-estado { width: 1px; height: 13px; background: var(--borde); }
+
+.estado { font-weight: 600; color: var(--texto-2); }
+.estado.ok { color: var(--ok); }
+.estado.fallo { color: var(--error); }
+.estado.trabajando { color: var(--acento); }
+
+.contador { font-family: var(--mono); }
+.contador.error.activo { color: var(--error); font-weight: 700; }
+.contador.aviso.activo { color: var(--aviso); font-weight: 700; }
+
+/* --- marcadores dentro de Monaco ----------------------------------------- */
+
+.linea-resaltada { background: color-mix(in srgb, var(--acento) 14%, transparent); }

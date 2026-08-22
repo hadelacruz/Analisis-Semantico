@@ -1,0 +1,12 @@
+.git
+.gitignore
+__pycache__
+*.pyc
+.pytest_cache
+.venv
+venv
+node_modules
+compiscript/**
+!compiscript/antlr-4.13.1-complete.jar
+!compiscript/program/program.cps
+src/compiscript/generated/

@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="es" data-tema="oscuro">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Compiscript IDE</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>&#129514;</text></svg>">
+  <link rel="stylesheet" href="{{ url_for('static', filename='vendor/monaco/vs/editor/editor.main.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/ide.css') }}">
+</head>
+<body>
+
+<header class="barra">
+  <div class="marca">
+    <span class="logo">&#129514;</span>
+    <div>
+      <strong>Compiscript IDE</strong>
+      <small>Analizador sintactico y semantico</small>
+    </div>
+  </div>
+
+  <div class="acciones">
+    <button id="btn-compilar" class="btn btn-primario" title="Ctrl+Enter">
+      <span>&#9654;</span> Compilar
+    </button>
+
+    <label class="interruptor" title="Analizar mientras se escribe">
+      <input type="checkbox" id="chk-auto" checked>
+      <span>Auto</span>
+    </label>
+
+    <select id="sel-ejemplos" class="control">
+      <option value="">Cargar ejemplo...</option>
+    </select>
+
+    <button id="btn-abrir" class="btn">Abrir</button>
+    <input type="file" id="input-archivo" accept=".cps,.txt" hidden>
+    <button id="btn-guardar" class="btn">Guardar</button>
+    <button id="btn-tema" class="btn btn-icono" title="Cambiar tema">&#9788;</button>
+  </div>
+</header>
+
+<main class="area">
+  <section class="panel-editor">
+    <div class="cabecera-panel">
+      <span class="titulo-panel">
+        <span id="nombre-archivo">editor.cps</span>
+        <span id="marca-sucio" class="punto-sucio" hidden>&#9679;</span>
+      </span>
+      <span id="posicion-cursor" class="meta">Ln 1, Col 1</span>
+    </div>
+    <div id="editor"></div>
+  </section>
+
+  <div class="separador-vertical" id="separador-v"></div>
+
+  <section class="panel-lateral">
+    <nav class="pestanas" id="pestanas-lateral">
+      <button class="pestana activa" data-vista="arbol">Arbol sintactico</button>
+      <button class="pestana" data-vista="simbolos">Tabla de simbolos</button>
+      <button class="pestana" data-vista="tokens">Tokens</button>
+      <button class="pestana" data-vista="reglas">Reglas</button>
+    </nav>
+
+    <div class="contenido-lateral">
+      <div class="vista activa" id="vista-arbol">
+        <div class="herramientas">
+          <button class="btn btn-mini" id="btn-expandir">Expandir todo</button>
+          <button class="btn btn-mini" id="btn-colapsar">Colapsar todo</button>
+          <label class="interruptor mini">
+            <input type="checkbox" id="chk-tipos" checked><span>Mostrar tipos</span>
+          </label>
+        </div>
+        <div id="arbol" class="scroll"></div>
+      </div>
+
+      <div class="vista" id="vista-simbolos">
+        <div class="herramientas">
+          <input type="search" id="filtro-simbolos" class="control" placeholder="Filtrar simbolos...">
+        </div>
+        <div id="simbolos" class="scroll"></div>
+      </div>
+
+      <div class="vista" id="vista-tokens">
+        <div id="tokens" class="scroll"></div>
+      </div>
+
+      <div class="vista" id="vista-reglas">
+        <div class="herramientas">
+          <input type="search" id="filtro-reglas" class="control" placeholder="Buscar regla o codigo...">
+        </div>
+        <div id="reglas" class="scroll"></div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<div class="separador-horizontal" id="separador-h"></div>
+
+<footer class="panel-inferior">
+  <nav class="pestanas" id="pestanas-inferior">
+    <button class="pestana activa" data-vista="problemas">
+      Problemas <span id="insignia-problemas" class="insignia">0</span>
+    </button>
+    <button class="pestana" data-vista="salida">Salida</button>
+  </nav>
+
+  <div class="contenido-inferior">
+    <div class="vista activa" id="vista-problemas">
+      <div id="problemas" class="scroll"></div>
+    </div>
+    <div class="vista" id="vista-salida">
+      <pre id="salida" class="scroll consola"></pre>
+    </div>
+  </div>
+</footer>
+
+<div class="barra-estado">
+  <span id="estado" class="estado">Listo</span>
+  <span class="separador-estado"></span>
+  <span id="conteo-errores" class="contador error">0 errores</span>
+  <span id="conteo-avisos" class="contador aviso">0 avisos</span>
+  <span class="separador-estado"></span>
+  <span id="tiempo" class="meta"></span>
+  <span class="crece"></span>
+  <span class="meta">Compiscript &middot; ANTLR 4.13.1</span>
+</div>
+
+<script>
+  window.RUTA_MONACO = "{{ url_for('static', filename='vendor/monaco') }}";
+</script>
+<script src="{{ url_for('static', filename='vendor/monaco/vs/loader.js') }}"></script>
+<script src="{{ url_for('static', filename='js/lenguaje.js') }}"></script>
+<script src="{{ url_for('static', filename='js/ide.js') }}"></script>
+</body>
+</html>

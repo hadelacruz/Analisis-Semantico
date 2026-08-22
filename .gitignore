@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.coverage
+htmlcov/
+.venv/
+venv/
+build/
+dist/
+
+# NOTA: src/compiscript/generated/ SI se versiona a proposito.
+# Asi el proyecto se puede ejecutar solo con Python, sin necesidad de tener
+# Java instalado para correr ANTLR. Se regenera con:
+#     python tools/generate_parser.py
+
+# Salidas de ejecucion
+*.dot
+salida/
+arbol.svg
+
+# Editores / SO
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
