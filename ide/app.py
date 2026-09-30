@@ -30,7 +30,10 @@ from compiscript.diagnostics import CATALOG           # noqa: E402
 EJEMPLOS = Path(__file__).resolve().parent / "ejemplos"
 
 app = Flask(__name__)
-app.config["JSON_AS_ASCII"] = False
+# Flask >= 2.3 retiro app.config["JSON_AS_ASCII"]; el ajuste vive en app.json.
+# Sin esto los acentos viajan escapados (é), que es JSON valido pero pesa
+# mas y complica depurar las respuestas a mano.
+app.json.ensure_ascii = False
 
 
 @app.get("/")

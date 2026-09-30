@@ -138,7 +138,7 @@ print("Total: " + total(carrito));
   function pintarResultado(resultado, ms) {
     pintarMarcadores(resultado.diagnostics);
     pintarProblemas(resultado.diagnostics);
-    pintarArbol(resultado.tree);
+    refrescarArbol();
     pintarSimbolos(resultado.symbols);
     pintarTokens(resultado.tokens);
     pintarSalida(resultado, ms);
@@ -236,8 +236,56 @@ print("Total: " + total(carrito));
 
   // =========================================================================
   // Arbol sintactico
+  //
+  // Dos ejes independientes:
+  //   * detalle : "compacto" (sin la cascada de precedencia de ANTLR) o
+  //               "completo" (todos los nodos de la gramatica).
+  //   * vista   : "indentado" (arbol plegable) o "grafico" (SVG con nodos
+  //               y aristas, con zoom, desplazamiento y seleccion).
+  // El backend manda los dos arboles en la misma respuesta, asi que cambiar
+  // de modo es instantaneo y no vuelve a analizar.
   // =========================================================================
-  function pintarArbol(arbol) {
+  let modoArbol = "compacto";       // compacto | completo
+  let subvistaArbol = "indentado";  // indentado | grafico
+
+  /** Arbol que corresponde al modo activo. */
+  function arbolActivo() {
+    if (!ultimoResultado) return null;
+    if (modoArbol === "compacto") {
+      // treeCompact solo falta si el backend es de una version anterior.
+      return ultimoResultado.treeCompact || ultimoResultado.tree;
+    }
+    return ultimoResultado.tree;
+  }
+
+  function contarNodos(nodo) {
+    if (!nodo) return 0;
+    return 1 + nodo.children.reduce((total, hijo) => total + contarNodos(hijo), 0);
+  }
+
+  /** Repinta la vista de arbol activa y actualiza el contador de nodos. */
+  function refrescarArbol() {
+    const arbol = arbolActivo();
+
+    const conteo = $("conteo-nodos");
+    if (conteo) {
+      if (!arbol) {
+        conteo.textContent = "";
+      } else if (modoArbol === "compacto" && ultimoResultado.tree) {
+        const compactos = contarNodos(arbol);
+        const completos = contarNodos(ultimoResultado.tree);
+        const ahorro = completos ? Math.round((1 - compactos / completos) * 100) : 0;
+        conteo.textContent = `${compactos} nodos (${ahorro}% menos que el completo)`;
+      } else {
+        conteo.textContent = `${contarNodos(arbol)} nodos`;
+      }
+    }
+
+    pintarArbolIndentado(arbol);
+    if (subvistaArbol === "grafico") pintarArbolGrafico(arbol);
+  }
+
+  function pintarArbolIndentado(arbol) {
     const contenedor = $("arbol");
     if (!arbol) {
       contenedor.innerHTML = '<div class="vacio">No hay arbol que mostrar.</div>';
@@ -266,6 +314,15 @@ print("Total: " + total(carrito));
       nodo.kind === "rule" ? "etiqueta-regla" : nodo.kind === "error" ? "etiqueta-error" : "etiqueta-token";
     etiqueta.textContent = nodo.kind === "rule" ? nodo.label : `"${nodo.label}"`;
     linea.appendChild(etiqueta);
+
+    // En modo compacto: cuantas reglas de precedencia absorbio este nodo.
+    if (nodo.collapsed && nodo.collapsed.length) {
+      const insignia = document.createElement("span");
+      insignia.className = "pos-nodo";
+      insignia.textContent = `+${nodo.collapsed.length}`;
+      insignia.title = "Reglas colapsadas:\n" + nodo.collapsed.join("\n");
+      linea.appendChild(insignia);
+    }
 
     if (nodo.type && $("chk-tipos").checked) {
       const tipo = document.createElement("span");
@@ -296,6 +353,281 @@ print("Total: " + total(carrito));
       elemento.appendChild(hijos);
     }
     return elemento;
+  }
+
+  // =========================================================================
+  // Arbol sintactico — vista grafica (SVG con nodos y aristas)
+  //
+  // Disposicion: recorrido en dos fases. Primero se mide cada subarbol
+  // (ancho = max(ancho propio, suma de los anchos de los hijos + separacion));
+  // luego se colocan los hijos dentro de la banda de su padre y el padre se
+  // centra sobre ellos. Con eso ningun nodo se solapa con sus hermanos.
+  // =========================================================================
+  const SVG_NS = "http://www.w3.org/2000/svg";
+  const ALTO_NODO = 26;
+  const SEP_HORIZONTAL = 16;
+  const SEP_VERTICAL = 62;
+  const ANCHO_MINIMO = 46;
+  const MAX_NODOS_GRAFICO = 3500;   // por encima de esto el SVG deja de ser util
+
+  const ESCALA_MINIMA_AJUSTE = 0.25;  // por debajo de esto no se lee nada
+
+  let vista = { escala: 1, x: 0, y: 0 };
+  let lienzoG = null;               // <g> que recibe la transformacion
+  let nodoSeleccionado = null;
+  let geometria = null;             // { ancho, alto, raizX } del dibujo actual
+  let ajustePendiente = false;      // se dibujo con el panel oculto
+
+  function textoDelNodo(nodo, conTipo) {
+    let texto = nodo.kind === "rule" ? nodo.label : `"${nodo.label}"`;
+    if (conTipo && nodo.type) texto += " : " + nodo.type;
+    return texto;
+  }
+
+  /** Ancho aproximado de la caja para un rotulo monoespaciado de 11px. */
+  function anchoDeTexto(texto) {
+    return Math.max(ANCHO_MINIMO, texto.length * 6.7 + 20);
+  }
+
+  function medirSubarbol(nodo, conTipo) {
+    const texto = textoDelNodo(nodo, conTipo);
+    const propio = anchoDeTexto(texto);
+    const hijos = nodo.children.map((h) => medirSubarbol(h, conTipo));
+    const anchoHijos = hijos.length
+      ? hijos.reduce((total, h) => total + h.ancho, 0) + (hijos.length - 1) * SEP_HORIZONTAL
+      : 0;
+    return { datos: nodo, texto, propio, hijos, anchoHijos, ancho: Math.max(propio, anchoHijos) };
+  }
+
+  function colocarSubarbol(medida, izquierda, profundidad) {
+    medida.y = profundidad * SEP_VERTICAL;
+    if (medida.hijos.length) {
+      let cursor = izquierda + (medida.ancho - medida.anchoHijos) / 2;
+      medida.hijos.forEach((hijo) => {
+        colocarSubarbol(hijo, cursor, profundidad + 1);
+        cursor += hijo.ancho + SEP_HORIZONTAL;
+      });
+      const primero = medida.hijos[0];
+      const ultimo = medida.hijos[medida.hijos.length - 1];
+      // Centrado sobre los hijos, pero sin salirse de la banda reservada: si un
+      // hijo es mucho mas ancho que otro el centro se desplaza y la caja del
+      // padre invadiria la del hermano de al lado.
+      const centro = (primero.x + ultimo.x) / 2;
+      const minimo = izquierda + medida.propio / 2;
+      const maximo = izquierda + medida.ancho - medida.propio / 2;
+      medida.x = Math.min(Math.max(centro, minimo), maximo);
+    } else {
+      medida.x = izquierda + medida.ancho / 2;
+    }
+  }
+
+  function aplanar(medida, salida) {
+    salida.push(medida);
+    medida.hijos.forEach((hijo) => aplanar(hijo, salida));
+    return salida;
+  }
+
+  function pintarArbolGrafico(arbol) {
+    const contenedor = $("grafico");
+    contenedor.innerHTML = "";
+    lienzoG = null;
+    nodoSeleccionado = null;
+
+    if (!arbol) {
+      contenedor.innerHTML = '<div class="aviso-grafico">No hay arbol que mostrar.</div>';
+      return;
+    }
+
+    const total = contarNodos(arbol);
+    if (total > MAX_NODOS_GRAFICO) {
+      contenedor.innerHTML =
+        '<div class="aviso-grafico">El arbol tiene ' + total + " nodos: demasiados para " +
+        "dibujarlos de forma legible.<br>Cambia a <strong>Compacto</strong> o usa la vista " +
+        "<strong>Indentado</strong>.</div>";
+      return;
+    }
+
+    const conTipo = $("chk-tipos").checked;
+    const raiz = medirSubarbol(arbol, conTipo);
+    colocarSubarbol(raiz, 0, 0);
+    const medidas = aplanar(raiz, []);
+
+    const margen = 30;
+    const ancho = raiz.ancho + margen * 2;
+    const alto = Math.max(...medidas.map((m) => m.y)) + ALTO_NODO + margen * 2;
+
+    const svg = document.createElementNS(SVG_NS, "svg");
+    svg.setAttribute("width", "100%");
+    svg.setAttribute("height", "100%");
+
+    const grupo = document.createElementNS(SVG_NS, "g");
+    svg.appendChild(grupo);
+    lienzoG = grupo;
+
+    // Aristas primero, para que queden por debajo de las cajas.
+    medidas.forEach((m) => {
+      m.hijos.forEach((h) => {
+        const arista = document.createElementNS(SVG_NS, "path");
+        const x1 = m.x + margen;
+        const y1 = m.y + ALTO_NODO + margen;
+        const x2 = h.x + margen;
+        const y2 = h.y + margen;
+        const medio = (y1 + y2) / 2;
+        arista.setAttribute("d", `M ${x1} ${y1} C ${x1} ${medio}, ${x2} ${medio}, ${x2} ${y2}`);
+        arista.setAttribute("class", "arista");
+        grupo.appendChild(arista);
+      });
+    });
+
+    medidas.forEach((m) => {
+      const nodo = m.datos;
+      const g = document.createElementNS(SVG_NS, "g");
+      g.setAttribute("class", "nodo-g");
+
+      const caja = document.createElementNS(SVG_NS, "rect");
+      caja.setAttribute("class", "caja " + nodo.kind);
+      caja.setAttribute("x", m.x - m.propio / 2 + margen);
+      caja.setAttribute("y", m.y + margen);
+      caja.setAttribute("width", m.propio);
+      caja.setAttribute("height", ALTO_NODO);
+      caja.setAttribute("rx", 6);
+      g.appendChild(caja);
+
+      const rotulo = document.createElementNS(SVG_NS, "text");
+      rotulo.setAttribute("class", "rotulo " + (nodo.kind === "rule" ? "regla" : "token"));
+      rotulo.setAttribute("x", m.x + margen);
+      rotulo.setAttribute("y", m.y + ALTO_NODO / 2 + margen);
+      rotulo.textContent = m.texto;
+      g.appendChild(rotulo);
+
+      const ayuda = document.createElementNS(SVG_NS, "title");
+      const partes = [nodo.label];
+      if (nodo.type) partes.push("tipo: " + nodo.type);
+      if (nodo.line) partes.push("linea " + nodo.line + ", columna " + nodo.column);
+      if (nodo.collapsed && nodo.collapsed.length)
+        partes.push("reglas colapsadas: " + nodo.collapsed.join(" > "));
+      ayuda.textContent = partes.join("\n");
+      g.appendChild(ayuda);
+
+      g.addEventListener("click", (evento) => {
+        evento.stopPropagation();
+        if (nodoSeleccionado) nodoSeleccionado.classList.remove("seleccionado");
+        g.classList.add("seleccionado");
+        nodoSeleccionado = g;
+        if (nodo.line) irALinea(nodo.line, nodo.column || 1);
+      });
+
+      grupo.appendChild(g);
+    });
+
+    contenedor.appendChild(svg);
+    geometria = { ancho, alto, raizX: raiz.x + margen };
+    ajustarGrafico();
+  }
+
+  function aplicarTransformacion() {
+    if (!lienzoG) return;
+    lienzoG.setAttribute(
+      "transform",
+      `translate(${vista.x}, ${vista.y}) scale(${vista.escala})`
+    );
+    $("nivel-zoom").textContent = Math.round(vista.escala * 100) + "%";
+  }
+
+  /** Encaja el arbol en el lienzo, sin bajar de una escala legible.
+   *
+   * Un parse tree es muchisimo mas ancho que alto (el de `program.cps` mide
+   * ~48.000 px de ancho), asi que "ajustar" al ancho dejaria una escala del
+   * 0,6 % en la que no se lee nada. Cuando eso pasa se ajusta al **alto**, se
+   * respeta una escala minima y se arranca centrado en la raiz, que es por
+   * donde uno empieza a leer; el resto se alcanza arrastrando.
+   */
+  function ajustarGrafico() {
+    const contenedor = $("grafico");
+    const caja = contenedor.getBoundingClientRect();
+    if (!geometria) return;
+    if (!caja.width || !caja.height) {
+      // El panel esta oculto (otra pestana activa): no se puede medir todavia.
+      // Se reintenta en cuanto vuelva a tener tamano.
+      ajustePendiente = true;
+      return;
+    }
+    ajustePendiente = false;
+
+    const porAncho = caja.width / geometria.ancho;
+    const porAlto = caja.height / geometria.alto;
+    vista.escala = Math.min(Math.max(Math.min(porAncho, porAlto), ESCALA_MINIMA_AJUSTE), 1.4);
+
+    const anchoDibujado = geometria.ancho * vista.escala;
+    vista.x =
+      anchoDibujado <= caja.width
+        ? (caja.width - anchoDibujado) / 2            // cabe entero: se centra
+        : caja.width / 2 - geometria.raizX * vista.escala;  // no cabe: raiz al centro
+    vista.y = 12;
+    aplicarTransformacion();
+  }
+
+  function ampliar(factor, centroX, centroY) {
+    if (!lienzoG) return;
+    const caja = $("grafico").getBoundingClientRect();
+    const cx = centroX === undefined ? caja.width / 2 : centroX;
+    const cy = centroY === undefined ? caja.height / 2 : centroY;
+    const nueva = Math.min(Math.max(vista.escala * factor, 0.08), 4);
+    // Se mantiene fijo el punto bajo el cursor.
+    vista.x = cx - ((cx - vista.x) * nueva) / vista.escala;
+    vista.y = cy - ((cy - vista.y) * nueva) / vista.escala;
+    vista.escala = nueva;
+    aplicarTransformacion();
+  }
+
+  function conectarGrafico() {
+    const contenedor = $("grafico");
+
+    contenedor.addEventListener(
+      "wheel",
+      (evento) => {
+        evento.preventDefault();
+        const caja = contenedor.getBoundingClientRect();
+        ampliar(
+          evento.deltaY < 0 ? 1.12 : 1 / 1.12,
+          evento.clientX - caja.left,
+          evento.clientY - caja.top
+        );
+      },
+      { passive: false }
+    );
+
+    contenedor.addEventListener("mousedown", (inicio) => {
+      if (inicio.button !== 0) return;
+      const desdeX = inicio.clientX - vista.x;
+      const desdeY = inicio.clientY - vista.y;
+      contenedor.classList.add("arrastrando");
+
+      const mover = (evento) => {
+        vista.x = evento.clientX - desdeX;
+        vista.y = evento.clientY - desdeY;
+        aplicarTransformacion();
+      };
+      const soltar = () => {
+        contenedor.classList.remove("arrastrando");
+        window.removeEventListener("mousemove", mover);
+        window.removeEventListener("mouseup", soltar);
+      };
+      window.addEventListener("mousemove", mover);
+      window.addEventListener("mouseup", soltar);
+    });
+
+    $("btn-zoom-mas").addEventListener("click", () => ampliar(1.25));
+    $("btn-zoom-menos").addEventListener("click", () => ampliar(1 / 1.25));
+    $("btn-zoom-ajustar").addEventListener("click", () => ajustarGrafico());
+
+    // Si el arbol se dibujo mientras el panel estaba oculto (el usuario estaba
+    // en otra pestana), se encuadra en cuanto vuelve a tener tamano.
+    if (typeof ResizeObserver === "function") {
+      new ResizeObserver(() => {
+        if (ajustePendiente) ajustarGrafico();
+      }).observe(contenedor);
+    }
   }
 
   // =========================================================================
@@ -524,6 +856,13 @@ print("Total: " + total(carrito));
   function conectarInterfaz() {
     $("btn-compilar").addEventListener("click", analizar);
 
+    // El modo del arbol se recuerda entre sesiones; compacto por defecto.
+    const guardado = localStorage.getItem("compiscript:modoArbol");
+    if (guardado === "completo" || guardado === "compacto") modoArbol = guardado;
+    $("modo-arbol")
+      .querySelectorAll(".segmento")
+      .forEach((b) => b.classList.toggle("activo", b.dataset.modo === modoArbol));
+
     // Pestanas (lateral e inferior)
     document.querySelectorAll(".pestanas").forEach((grupo) => {
       grupo.addEventListener("click", (evento) => {
@@ -546,9 +885,35 @@ print("Total: " + total(carrito));
         .querySelectorAll("#arbol .nodo")
         .forEach((n, i) => i > 0 && n.classList.add("colapsado"))
     );
-    $("chk-tipos").addEventListener("change", () => {
-      if (ultimoResultado) pintarArbol(ultimoResultado.tree);
+    $("chk-tipos").addEventListener("change", refrescarArbol);
+
+    // Interruptor Compacto / Completo
+    $("modo-arbol").addEventListener("click", (evento) => {
+      const boton = evento.target.closest(".segmento");
+      if (!boton || boton.dataset.modo === modoArbol) return;
+      modoArbol = boton.dataset.modo;
+      $("modo-arbol")
+        .querySelectorAll(".segmento")
+        .forEach((b) => b.classList.toggle("activo", b.dataset.modo === modoArbol));
+      localStorage.setItem("compiscript:modoArbol", modoArbol);
+      refrescarArbol();
     });
+
+    // Sub-pestanas Indentado / Grafico
+    $("subpestanas-arbol").addEventListener("click", (evento) => {
+      const boton = evento.target.closest(".subpestana");
+      if (!boton) return;
+      subvistaArbol = boton.dataset.sub;
+      $("subpestanas-arbol")
+        .querySelectorAll(".subpestana")
+        .forEach((b) => b.classList.toggle("activa", b === boton));
+      document
+        .querySelectorAll("#vista-arbol .subvista")
+        .forEach((v) => v.classList.toggle("activa", v.id === "subvista-" + subvistaArbol));
+      if (subvistaArbol === "grafico") pintarArbolGrafico(arbolActivo());
+    });
+
+    conectarGrafico();
 
     // Filtros
     $("filtro-simbolos").addEventListener("input", () => {

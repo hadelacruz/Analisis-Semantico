@@ -504,3 +504,124 @@ table.rejilla tr:hover td { background: var(--fondo-3); }
 /* --- marcadores dentro de Monaco ----------------------------------------- */
 
 .linea-resaltada { background: color-mix(in srgb, var(--acento) 14%, transparent); }
+
+/* =========================================================================
+   Panel del arbol: sub-pestanas, interruptor compacto/completo y vista SVG
+   ========================================================================= */
+
+.herramientas .crece { flex: 1; }
+.herramientas .meta { color: var(--texto-3); font-size: 11px; white-space: nowrap; }
+
+/* --- interruptor segmentado "Compacto | Completo" ------------------------ */
+
+.segmentado {
+  display: inline-flex;
+  border: 1px solid var(--borde);
+  border-radius: 6px;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+.segmentado .segmento {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--texto-2);
+  font-family: var(--sans);
+  font-size: 11px;
+  padding: 3px 10px;
+  cursor: pointer;
+}
+.segmentado .segmento + .segmento { border-left: 1px solid var(--borde); }
+.segmentado .segmento:hover { background: var(--fondo-3); color: var(--texto); }
+.segmentado .segmento.activo {
+  background: color-mix(in srgb, var(--acento) 22%, transparent);
+  color: var(--acento);
+  font-weight: 600;
+}
+
+/* --- sub-pestanas Indentado / Grafico ------------------------------------ */
+
+.subpestanas {
+  display: flex;
+  gap: 2px;
+  padding: 0 8px;
+  border-bottom: 1px solid var(--borde);
+  flex-shrink: 0;
+}
+.subpestana {
+  appearance: none;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--texto-3);
+  font-family: var(--sans);
+  font-size: 11px;
+  padding: 5px 10px;
+  cursor: pointer;
+}
+.subpestana:hover { color: var(--texto); }
+.subpestana.activa { color: var(--acento); border-bottom-color: var(--acento); }
+
+.subvista { display: none; flex: 1; min-height: 0; flex-direction: column; }
+.subvista.activa { display: flex; }
+
+/* --- lienzo de la vista grafica ------------------------------------------ */
+
+.lienzo-grafico {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  position: relative;
+  background:
+    radial-gradient(circle at 1px 1px, var(--borde) 1px, transparent 0) 0 0 / 22px 22px;
+  cursor: grab;
+}
+.lienzo-grafico.arrastrando { cursor: grabbing; }
+.lienzo-grafico svg { display: block; width: 100%; height: 100%; }
+
+.arista { fill: none; stroke: var(--borde); stroke-width: 1.2px; }
+
+.nodo-g { cursor: pointer; }
+.nodo-g .caja {
+  stroke-width: 1px;
+  transition: filter .1s;
+}
+.nodo-g .caja.regla {
+  fill: color-mix(in srgb, var(--acento) 18%, var(--panel));
+  stroke: color-mix(in srgb, var(--acento) 55%, transparent);
+}
+.nodo-g .caja.token {
+  fill: color-mix(in srgb, var(--naranja) 18%, var(--panel));
+  stroke: color-mix(in srgb, var(--naranja) 55%, transparent);
+}
+.nodo-g .caja.error {
+  fill: color-mix(in srgb, var(--error) 22%, var(--panel));
+  stroke: var(--error);
+}
+.nodo-g:hover .caja { filter: brightness(1.25); }
+.nodo-g.seleccionado .caja { stroke: var(--acento-2); stroke-width: 2.5px; }
+
+.nodo-g .rotulo {
+  font-family: var(--mono);
+  font-size: 11px;
+  fill: var(--texto);
+  dominant-baseline: middle;
+  text-anchor: middle;
+  pointer-events: none;
+  user-select: none;
+}
+.nodo-g .rotulo.token { fill: var(--naranja); }
+.nodo-g .rotulo .tipo-svg { fill: var(--ok); font-size: 10px; }
+
+.aviso-grafico {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 24px;
+  color: var(--texto-3);
+  font-size: 12px;
+  line-height: 1.6;
+}

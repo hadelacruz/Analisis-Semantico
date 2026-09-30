@@ -12,6 +12,7 @@ import pytest
 
 from conftest import ROOT, check
 from compiscript.cli import main
+from compiscript.tree_export import count_nodes
 
 PROGRAMA = """
 let x: integer = 1 + 2;
@@ -110,6 +111,165 @@ def test_el_arbol_se_construye_aunque_haya_errores_semanticos():
 
 
 # ---------------------------------------------------------------------------
+# Modo compacto: se colapsa la cascada de precedencia de ANTLR
+# ---------------------------------------------------------------------------
+
+SUMA = "let x: integer = 5 + 3;"
+
+
+def _etiquetas(nodo):
+    salida = [nodo["label"]]
+    for hijo in nodo["children"]:
+        salida.extend(_etiquetas(hijo))
+    return salida
+
+
+def _tipos(nodo):
+    salida = [nodo["type"]] if "type" in nodo else []
+    for hijo in nodo["children"]:
+        salida.extend(_tipos(hijo))
+    return salida
+
+
+def test_el_modo_compacto_tiene_menos_nodos_que_el_completo():
+    """`5 + 3` gasta siete niveles de precedencia en el modo completo."""
+    result = check(SUMA)
+    completo = result.tree_dict()
+    compacto = result.tree_dict(compact=True)
+
+    assert count_nodes(compacto) < count_nodes(completo)
+    # La cascada de precedencia aporta 7 niveles solo para la suma, mas los de
+    # cada literal: el colapso tiene que quitar al menos una decena de nodos.
+    assert count_nodes(completo) - count_nodes(compacto) >= 10
+    assert count_nodes(compacto) <= count_nodes(completo) * 0.6
+
+
+def test_el_modo_compacto_elimina_los_eslabones_de_precedencia():
+    compacto = check(SUMA).tree_dict(compact=True)
+    etiquetas = _etiquetas(compacto)
+
+    # Los eslabones que solo existen por la precedencia desaparecen...
+    for relleno in (
+        "assignmentExpr: ExprNoAssign",
+        "conditionalExpr: TernaryExpr",
+        "logicalOrExpr",
+        "logicalAndExpr",
+        "equalityExpr",
+        "relationalExpr",
+        "multiplicativeExpr",
+        "unaryExpr",
+        "primaryExpr",
+    ):
+        assert relleno not in etiquetas, f"'{relleno}' no deberia sobrevivir al colapso"
+
+    # ...y el nodo con contenido real (la suma) se conserva.
+    assert "additiveExpr" in etiquetas
+    assert "program" in etiquetas
+    assert "variableDeclaration" in etiquetas
+
+
+def test_el_colapso_conserva_las_hojas_del_programa():
+    """Ningún token puede perderse al colapsar."""
+    result = check(SUMA)
+    hojas_completo = [n for n in _etiquetas(result.tree_dict()) if n in ("5", "3", "+", "let", "x")]
+    hojas_compacto = [
+        n for n in _etiquetas(result.tree_dict(compact=True)) if n in ("5", "3", "+", "let", "x")
+    ]
+    assert sorted(hojas_completo) == sorted(hojas_compacto)
+
+
+def test_el_tipo_inferido_sobrevive_al_colapso():
+    """El requisito clave: colapsar no puede perder la anotación de tipo."""
+    result = check(SUMA)
+    assert "integer" in _tipos(result.tree_dict())
+    assert "integer" in _tipos(result.tree_dict(compact=True))
+
+    # Y concretamente sobre el nodo que sobrevive a la cadena.
+    compacto = result.tree_dict(compact=True)
+
+    def buscar(nodo, etiqueta):
+        if nodo["label"] == etiqueta:
+            return nodo
+        for hijo in nodo["children"]:
+            encontrado = buscar(hijo, etiqueta)
+            if encontrado:
+                return encontrado
+        return None
+
+    suma = buscar(compacto, "additiveExpr")
+    assert suma is not None
+    assert suma["type"] == "integer"
+
+
+def test_el_nodo_colapsado_recuerda_las_reglas_que_absorbio():
+    compacto = check(SUMA).tree_dict(compact=True)
+
+    def buscar(nodo, etiqueta):
+        if nodo["label"] == etiqueta:
+            return nodo
+        for hijo in nodo["children"]:
+            encontrado = buscar(hijo, etiqueta)
+            if encontrado:
+                return encontrado
+        return None
+
+    suma = buscar(compacto, "additiveExpr")
+    assert suma["collapsed"], "el nodo deberia listar las reglas colapsadas"
+    assert "logicalOrExpr" in suma["collapsed"]
+    assert "conditionalExpr: TernaryExpr" in suma["collapsed"]
+
+
+def test_el_modo_compacto_no_altera_el_modo_completo():
+    """Los dos modos conviven: pedir uno no degrada al otro."""
+    result = check(SUMA)
+    antes = count_nodes(result.tree_dict())
+    result.tree_dict(compact=True)
+    assert count_nodes(result.tree_dict()) == antes
+    assert "logicalOrExpr" in _etiquetas(result.tree_dict())
+
+
+def test_los_identificadores_siguen_siendo_unicos_en_modo_compacto():
+    compacto = check(PROGRAMA).tree_dict(compact=True)
+    vistos = set()
+
+    def recorrer(node):
+        assert node["id"] not in vistos
+        vistos.add(node["id"])
+        for child in node["children"]:
+            recorrer(child)
+
+    recorrer(compacto)
+
+
+def test_el_colapso_reduce_un_programa_real():
+    """Sobre el programa de ejemplo del curso el ahorro debe ser sustancial."""
+    result = check(PROGRAMA)
+    completo = count_nodes(result.tree_dict())
+    compacto = count_nodes(result.tree_dict(compact=True))
+    assert compacto < completo * 0.65
+
+
+def test_el_texto_y_el_dot_tambien_tienen_modo_compacto():
+    result = check(SUMA)
+    assert "logicalOrExpr" in result.tree_text()
+    assert "logicalOrExpr" not in result.tree_text(compact=True)
+    assert "additiveExpr" in result.tree_text(compact=True)
+
+    assert "logicalOrExpr" in result.tree_dot()
+    assert "logicalOrExpr" not in result.tree_dot(compact=True)
+    assert result.tree_dot(compact=True).startswith("digraph AST {")
+
+
+def test_la_respuesta_del_ide_trae_los_dos_arboles():
+    """El IDE cambia de modo sin volver a pedir el analisis."""
+    data = check(SUMA).to_dict()
+    assert data["tree"] is not None
+    assert data["treeCompact"] is not None
+    assert count_nodes(data["treeCompact"]) < count_nodes(data["tree"])
+    json.dumps(data)  # sigue siendo serializable
+
+
+# ---------------------------------------------------------------------------
 # Volcado de tokens
 # ---------------------------------------------------------------------------
 
@@ -182,6 +342,28 @@ def test_cli_muestra_tabla_de_simbolos(capsys):
 def test_cli_muestra_el_arbol(capsys):
     main([str(VALIDO), "--tree", "--no-color"])
     assert "ARBOL SINTACTICO" in capsys.readouterr().out
+
+
+def test_cli_tree_es_compacto_por_defecto(capsys):
+    main([str(VALIDO), "--tree", "--no-color"])
+    salida = capsys.readouterr().out
+    assert "(compacto)" in salida
+    assert "logicalOrExpr" not in salida
+
+
+def test_cli_tree_completo_muestra_toda_la_cascada(capsys):
+    main([str(VALIDO), "--tree-completo", "--no-color"])
+    salida = capsys.readouterr().out
+    assert "(completo)" in salida
+    assert "logicalOrExpr" in salida
+
+
+def test_cli_el_arbol_compacto_es_mas_corto(capsys):
+    main([str(VALIDO), "--tree", "--no-color"])
+    compacto = len(capsys.readouterr().out.splitlines())
+    main([str(VALIDO), "--tree-completo", "--no-color"])
+    completo = len(capsys.readouterr().out.splitlines())
+    assert compacto < completo
 
 
 def test_cli_emite_json(capsys):

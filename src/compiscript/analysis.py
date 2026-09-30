@@ -71,21 +71,42 @@ class AnalysisResult:
         return [d.code for d in self.errors]
 
     # -- exportación ----------------------------------------------------------
-    def tree_dict(self) -> Optional[dict]:
+    @property
+    def _node_types(self) -> Optional[dict]:
+        return self.checker.node_types if self.checker else None
+
+    def tree_dict(self, compact: bool = False) -> Optional[dict]:
+        """Árbol como diccionario. ``compact=True`` colapsa la cascada de
+        precedencia de ANTLR (ver :mod:`compiscript.tree_export`)."""
         if self.tree is None:
             return None
-        node_types = self.checker.node_types if self.checker else None
-        return tree_to_dict(self.tree, CompiscriptParser.ruleNames, node_types=node_types)
+        return tree_to_dict(
+            self.tree,
+            CompiscriptParser.ruleNames,
+            node_types=self._node_types,
+            compact=compact,
+        )
 
-    def tree_text(self) -> str:
+    def tree_text(self, compact: bool = False) -> str:
         if self.tree is None:
             return ""
-        return tree_to_text(self.tree, CompiscriptParser.ruleNames)
+        return tree_to_text(
+            self.tree,
+            CompiscriptParser.ruleNames,
+            node_types=self._node_types if compact else None,
+            compact=compact,
+        )
 
-    def tree_dot(self) -> str:
+    def tree_dot(self, compact: bool = False) -> str:
         if self.tree is None:
             return ""
-        return tree_to_dot(self.tree, CompiscriptParser.ruleNames, title=self.filename)
+        return tree_to_dot(
+            self.tree,
+            CompiscriptParser.ruleNames,
+            title=self.filename,
+            node_types=self._node_types,
+            compact=compact,
+        )
 
     def symbols_dict(self) -> Optional[dict]:
         return self.symbol_table.to_dict() if self.symbol_table else None
@@ -113,7 +134,12 @@ class AnalysisResult:
         return output
 
     def to_dict(self) -> dict:
-        """Respuesta JSON completa para el IDE."""
+        """Respuesta JSON completa para el IDE.
+
+        Se envían **los dos** árboles (completo y compacto) para que el
+        interruptor "Compacto / Completo" del IDE cambie de vista al instante,
+        sin volver a pedir el análisis al servidor.
+        """
         return {
             "ok": self.ok,
             "filename": self.filename,
@@ -122,6 +148,7 @@ class AnalysisResult:
             "errorCount": len(self.errors),
             "warningCount": len(self.warnings),
             "tree": self.tree_dict(),
+            "treeCompact": self.tree_dict(compact=True),
             "symbols": self.symbols_dict(),
             "tokens": self.tokens_list(),
         }

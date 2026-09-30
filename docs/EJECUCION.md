@@ -80,9 +80,11 @@ Resultado: 1 error(es).
 | Opción | Qué hace |
 | --- | --- |
 | `--symbols`, `-s` | Imprime la tabla de símbolos completa |
-| `--tree`, `-t` | Imprime el árbol sintáctico en texto |
+| `--tree`, `-t` | Imprime el árbol sintáctico en texto, en **modo compacto**: se colapsan las cadenas de precedencia de ANTLR (`expression` → `assignmentExpr` → … → `primaryExpr`) conservando el nodo con contenido real y su tipo inferido |
+| `--tree-completo`, `-T` | Igual, pero con **todos** los nodos de la gramática, sin colapsar |
 | `--tokens` | Imprime el flujo de tokens |
-| `--dot ARCHIVO` | Escribe el árbol en formato Graphviz DOT |
+| `--dot ARCHIVO` | Escribe el árbol (compacto) en formato Graphviz DOT |
+| `--dot-completo` | Con `--dot`, exporta el árbol completo en vez del compacto |
 | `--json` | Emite todo el resultado en JSON |
 | `--quiet`, `-q` | Sólo el código de salida |
 | `--no-color` | Desactiva los colores ANSI |

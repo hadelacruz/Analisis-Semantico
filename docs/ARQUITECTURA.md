@@ -331,6 +331,7 @@ por tests.
 | --- | --- |
 | **Se añade `float` a la gramática** | El enunciado exige validar aritmética sobre `integer` **o `float`**, pero la gramática original no tenía `float`. El cambio es retrocompatible. |
 | **`break` es válido dentro de un `switch`** aunque no haya bucle | Es el comportamiento convencional del constructo y aparece así en el ejemplo del curso. `continue`, en cambio, exige un bucle de verdad. |
+| **La condición del `switch` NO se exige `boolean`** | El enunciado agrupa `switch` con `if`/`while`/`for` («la condición debe evaluar a `boolean`»), pero un `switch` cuyo sujeto fuera `boolean` sólo admitiría dos casos y haría inútil el constructo — el propio ejemplo del README oficial hace `switch (x)` sobre un `integer`. Lo que se valida, que es la comprobación equivalente y la útil, es que **cada `case` sea comparable con el sujeto** (`E405`), usando las mismas reglas que `==`. La condición sí se exige `boolean` en `if`, `while`, `do-while` y `for` (`E401`). |
 | **`string + valor` es concatenación** | `program.cps` del curso hace `print("5 + 1 = " + addFive)`. |
 | **La variable de `catch` es un `string`** | La gramática no permite anotarle un tipo y el ejemplo del curso la concatena con un string: `print("Caught an error: " + err)`. |
 | **El índice constante fuera de rango es *advertencia*, no error** | El ejemplo del curso accede a `numbers[10]` **a propósito** dentro de un `try` para provocar la excepción. Marcarlo como error rechazaría un programa válido. |
@@ -399,11 +400,67 @@ llamadas a `analyze`. Toda la lógica vive en el compilador.
 Monaco está **vendorizado** en `ide/static/vendor/monaco/` (sólo los archivos
 imprescindibles, 4.4 MB) para que el IDE funcione **sin conexión a internet**.
 
+### El panel del árbol sintáctico
+
+El requerimiento 2 pide el árbol «con una representación visual». El panel tiene
+**dos ejes independientes**:
+
+| Eje | Opciones | Para qué |
+| --- | --- | --- |
+| **Detalle** | `Compacto` (por defecto) · `Completo` | Compacto colapsa la cascada de precedencia; Completo muestra la gramática entera |
+| **Vista** | `Indentado` · `Gráfico` | Indentado es el árbol plegable; Gráfico dibuja nodos y aristas en SVG |
+
+**Por qué hace falta el modo compacto.** La gramática codifica la precedencia
+como una cascada de reglas. Una expresión que no usa un nivel deja igualmente su
+nodo, con un solo hijo. Para `let x: integer = 5 + 3;`:
+
+```
+completo (33 nodos)                    compacto (18 nodos)
+expression                             initializer
+└── assignmentExpr: ExprNoAssign       ├── '='
+    └── conditionalExpr: TernaryExpr   └── additiveExpr : integer  [+7]
+        └── logicalOrExpr                  ├── literalExpr : integer  [+3]
+            └── logicalAndExpr              │   └── '5'
+                └── equalityExpr            ├── '+'
+                    └── relationalExpr      └── literalExpr : integer  [+3]
+                        └── additiveExpr        └── '3'
+                            └── ...
+```
+
+En `compiscript/program/program.cps` (108 líneas) la reducción es de **1758 a
+774 nodos, un 56 %**.
+
+El colapso lo implementa `tree_export.collapse_chain`: recorre las cadenas de
+nodos-regla con **exactamente un hijo que también es un nodo-regla**, conserva el
+más profundo (el que tiene contenido real) y **le transfiere el tipo inferido**
+del eslabón más profundo que lo tuviera, de modo que no se pierde información de
+tipos. El nodo superviviente guarda en `collapsed` los nombres de las reglas
+absorbidas, que el IDE muestra como `[+7]` y en el tooltip.
+
+El backend manda los **dos** árboles (`tree` y `treeCompact`) en la misma
+respuesta, así que el interruptor del IDE cambia de vista al instante sin
+reanalizar. El mismo colapso está disponible en el CLI (`--tree` compacto,
+`--tree-completo` verboso) y en la exportación a DOT.
+
+**La vista gráfica** dibuja el árbol en SVG generado en el cliente:
+
+* Disposición en dos fases. Primero se mide cada subárbol
+  (`ancho = max(ancho propio, Σ anchos de los hijos + separación)`); luego se
+  colocan los hijos dentro de la banda de su padre y el padre se centra sobre
+  ellos, **acotado a su banda** para que su caja no invada la del hermano.
+* Zoom con la rueda (anclado al puntero), desplazamiento arrastrando y un botón
+  *Ajustar*. Como un parse tree es muchísimo más ancho que alto (el de
+  `program.cps` mide ~48 000 px), *Ajustar* no baja de una escala legible: si el
+  árbol no cabe, encuadra por el alto y centra la **raíz**.
+* Al hacer clic en un nodo se resalta y el editor **salta a su línea y columna**.
+* Por encima de 3500 nodos el SVG deja de ser legible y el panel sugiere el modo
+  compacto o la vista indentada, en vez de dibujar algo inservible.
+
 ---
 
 ## 11. Estrategia de pruebas
 
-364 tests en dos niveles:
+377 tests en dos niveles:
 
 **Nivel 1 — unitario, por regla.** Cada una de las 53 reglas tiene al menos un
 caso exitoso y uno fallido, con fragmentos mínimos:

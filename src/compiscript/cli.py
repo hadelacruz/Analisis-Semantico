@@ -3,7 +3,8 @@
 Ejemplos::
 
     python -m compiscript programa.cps
-    python -m compiscript programa.cps --symbols --tree
+    python -m compiscript programa.cps --symbols --tree      # arbol compacto
+    python -m compiscript programa.cps --tree-completo       # arbol sin colapsar
     python -m compiscript programa.cps --dot arbol.dot
     python -m compiscript programa.cps --json
 
@@ -92,9 +93,25 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("archivo", help="archivo fuente .cps a analizar")
     parser.add_argument("--symbols", "-s", action="store_true", help="imprime la tabla de simbolos")
-    parser.add_argument("--tree", "-t", action="store_true", help="imprime el arbol sintactico")
+    parser.add_argument(
+        "--tree",
+        "-t",
+        action="store_true",
+        help="imprime el arbol sintactico en modo compacto (sin la cascada de precedencia)",
+    )
+    parser.add_argument(
+        "--tree-completo",
+        "-T",
+        action="store_true",
+        help="imprime el arbol sintactico completo, con todos los nodos de la gramatica",
+    )
     parser.add_argument("--tokens", action="store_true", help="imprime el flujo de tokens")
     parser.add_argument("--dot", metavar="ARCHIVO", help="escribe el arbol en formato Graphviz DOT")
+    parser.add_argument(
+        "--dot-completo",
+        action="store_true",
+        help="con --dot, exporta el arbol completo en vez del compacto",
+    )
     parser.add_argument("--json", action="store_true", help="emite el resultado completo en JSON")
     parser.add_argument("--quiet", "-q", action="store_true", help="solo el codigo de salida")
     parser.add_argument("--no-color", action="store_true", help="desactiva los colores ANSI")
@@ -133,16 +150,29 @@ def main(argv: list[str] | None = None) -> int:
             for token in result.tokens_list():
                 print(f"  {token['line']:>4}:{token['column']:<4} {token['type']:<16} {token['text']}")
 
-        if args.tree:
-            print("\n" + _paint("== ARBOL SINTACTICO ==", "cyan", color))
-            print(result.tree_text())
+        if args.tree or args.tree_completo:
+            compacto = not args.tree_completo
+            titulo = "== ARBOL SINTACTICO (compacto) ==" if compacto else "== ARBOL SINTACTICO (completo) =="
+            print("\n" + _paint(titulo, "cyan", color))
+            print(result.tree_text(compact=compacto))
+            if compacto:
+                print(
+                    _paint(
+                        "  (se colapsaron las cadenas de precedencia; usa --tree-completo "
+                        "para ver todos los nodos)",
+                        "dim",
+                        color,
+                    )
+                )
 
         if args.symbols:
             print("\n" + _paint("== TABLA DE SIMBOLOS ==", "cyan", color))
             print(result.symbols_text())
 
     if args.dot:
-        Path(args.dot).write_text(result.tree_dot(), encoding="utf-8")
+        Path(args.dot).write_text(
+            result.tree_dot(compact=not args.dot_completo), encoding="utf-8"
+        )
         if not args.quiet:
             print(f"\nArbol escrito en {args.dot}")
 

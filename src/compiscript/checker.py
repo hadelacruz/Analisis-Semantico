@@ -50,6 +50,18 @@ from .types import (
 )
 
 
+def _de(descripcion: str) -> str:
+    """``de`` + descripción, contrayendo ``de el`` en ``del``.
+
+    Las descripciones de :class:`LValue` empiezan por su artículo ("el metodo
+    'x'", "la variable 'y'") para poder incrustarlas en cualquier mensaje; sin
+    esta contracción saldría "de el constructor de 'A'".
+    """
+    if descripcion.startswith("el "):
+        return "del " + descripcion[3:]
+    return "de " + descripcion
+
+
 @dataclass
 class LValue:
     """Resultado de analizar un ``leftHandSide``.
@@ -1391,7 +1403,8 @@ class SemanticChecker(CompiscriptVisitor):
             # E301 / E504 — número incorrecto de argumentos
             self._err(
                 arity_code,
-                f"{description} espera {expected} argumento(s) pero recibio {received}.",
+                f"{description[0].upper()}{description[1:]} espera {expected} "
+                f"argumento(s) pero recibio {received}.",
                 position_ctx,
             )
 
@@ -1401,7 +1414,7 @@ class SemanticChecker(CompiscriptVisitor):
                 # E302 — tipo de argumento incompatible
                 self._err(
                     "E302",
-                    f"El argumento {index + 1} ('{names[index]}') de {description} debe "
+                    f"El argumento {index + 1} ('{names[index]}') {_de(description)} debe "
                     f"ser de tipo '{declared}', pero se recibio '{given}'.",
                     argument_ctxs[index],
                 )

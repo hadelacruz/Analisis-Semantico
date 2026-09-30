@@ -65,13 +65,43 @@
     <div class="contenido-lateral">
       <div class="vista activa" id="vista-arbol">
         <div class="herramientas">
-          <button class="btn btn-mini" id="btn-expandir">Expandir todo</button>
-          <button class="btn btn-mini" id="btn-colapsar">Colapsar todo</button>
+          <div class="segmentado" id="modo-arbol" role="group" aria-label="Detalle del arbol">
+            <button class="segmento activo" data-modo="compacto"
+                    title="Colapsa la cascada de precedencia de ANTLR">Compacto</button>
+            <button class="segmento" data-modo="completo"
+                    title="Todos los nodos de la gramatica, sin colapsar">Completo</button>
+          </div>
           <label class="interruptor mini">
             <input type="checkbox" id="chk-tipos" checked><span>Mostrar tipos</span>
           </label>
+          <span class="crece"></span>
+          <span id="conteo-nodos" class="meta"></span>
         </div>
-        <div id="arbol" class="scroll"></div>
+
+        <nav class="subpestanas" id="subpestanas-arbol">
+          <button class="subpestana activa" data-sub="indentado">Indentado</button>
+          <button class="subpestana" data-sub="grafico">Grafico</button>
+        </nav>
+
+        <div class="subvista activa" id="subvista-indentado">
+          <div class="herramientas">
+            <button class="btn btn-mini" id="btn-expandir">Expandir todo</button>
+            <button class="btn btn-mini" id="btn-colapsar">Colapsar todo</button>
+          </div>
+          <div id="arbol" class="scroll"></div>
+        </div>
+
+        <div class="subvista" id="subvista-grafico">
+          <div class="herramientas">
+            <button class="btn btn-mini" id="btn-zoom-menos" title="Alejar">&minus;</button>
+            <button class="btn btn-mini" id="btn-zoom-mas" title="Acercar">+</button>
+            <button class="btn btn-mini" id="btn-zoom-ajustar" title="Ajustar a la ventana">Ajustar</button>
+            <span id="nivel-zoom" class="meta">100%</span>
+            <span class="crece"></span>
+            <span class="meta">rueda = zoom &middot; arrastrar = mover &middot; clic = ir a la linea</span>
+          </div>
+          <div id="grafico" class="lienzo-grafico"></div>
+        </div>
       </div>
 
       <div class="vista" id="vista-simbolos">
