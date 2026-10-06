@@ -10,6 +10,7 @@ from conftest import assert_ok, check
 
 from compiscript.scope import ScopeKind
 from compiscript.symbols import StorageKind, SymbolCategory
+from compiscript.types import OBJECT_HEADER_SIZE
 
 pytestmark = pytest.mark.tabla
 
@@ -154,10 +155,14 @@ def test_las_funciones_y_metodos_tienen_etiqueta(tabla):
 
 def test_las_clases_conocen_el_layout_de_sus_instancias(tabla):
     punto = tabla.global_scope.resolve_local("Punto")
-    assert punto.fields["x"].offset == 0
-    assert punto.fields["y"].offset == 4
-    assert punto.instance_size == 8
+    # Los atributos van detras de la cabecera (el puntero a la tabla de metodos).
+    assert punto.fields["x"].offset == OBJECT_HEADER_SIZE
+    assert punto.fields["y"].offset == OBJECT_HEADER_SIZE + 4
+    assert punto.instance_size == OBJECT_HEADER_SIZE + 8
     assert punto.vtable == {"constructor": "Punto_constructor", "norma": "Punto_norma"}
+    # Cada metodo tiene una ranura fija dentro de la tabla.
+    assert punto.vtable_slots == {"constructor": 0, "norma": 4}
+    assert punto.vtable_label == "vtable_Punto"
 
 
 def test_los_closures_registran_sus_capturas(tabla):

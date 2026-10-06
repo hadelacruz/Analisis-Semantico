@@ -101,6 +101,7 @@ print("Total: " + total(carrito));
 
     editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter, analizar);
     editor.addCommand(monaco.KeyCode.F5, analizar);
+    editor.addCommand(monaco.KeyCode.F6, ejecutar);
     editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, guardar);
 
     conectarInterfaz();
@@ -141,6 +142,7 @@ print("Total: " + total(carrito));
     refrescarArbol();
     pintarSimbolos(resultado.symbols);
     pintarTokens(resultado.tokens);
+    pintarTac(resultado.tac);
     pintarSalida(resultado, ms);
 
     const errores = resultado.errorCount;
@@ -765,6 +767,102 @@ print("Total: " + total(carrito));
     });
   }
 
+
+  // =========================================================================
+  // Codigo intermedio
+  // =========================================================================
+  function pintarTac(tac) {
+    const contenedor = $("tac");
+    if (!tac) {
+      contenedor.innerHTML =
+        '<div class="vacio">El codigo intermedio se genera cuando el programa ' +
+        "compila sin errores.</div>";
+      $("metricas-tac").textContent = "";
+      return;
+    }
+
+    const numerar = $("chk-tac-numerar").checked;
+    const conComentarios = $("chk-tac-comentarios").checked;
+    const filtro = $("filtro-tac").value.trim().toLowerCase();
+
+    // El filtro selecciona rutinas completas, no lineas sueltas.
+    let rango = null;
+    if (filtro) {
+      const rutina = tac.functions.find((f) => f.label.toLowerCase().includes(filtro));
+      if (rutina) rango = [rutina.start, rutina.end];
+    }
+
+    const filas = [];
+    tac.instructions.forEach((quad, indice) => {
+      if (rango && (indice < rango[0] || indice > rango[1])) return;
+      if (!conComentarios && quad.op === "comment") return;
+
+      let clase = "";
+      if (quad.op === "comment") clase = "tac-comentario";
+      else if (quad.op === "label") clase = "tac-etiqueta";
+      else if (quad.op === "func_begin" || quad.op === "func_end") clase = "tac-rutina";
+
+      const sangrado = clase ? "" : "    ";
+      let cuerpo = escapar(sangrado + quad.text);
+      if (conComentarios && quad.comment && quad.op !== "comment") {
+        cuerpo += '  <span class="tac-nota">; ' + escapar(quad.comment) + "</span>";
+      }
+      filas.push(
+        '<div class="tac-linea">' +
+          (numerar ? '<span class="tac-num">' + indice + "</span>" : "") +
+          '<span class="tac-cuerpo ' + clase + '">' + cuerpo + "</span>" +
+          "</div>"
+      );
+    });
+
+    contenedor.innerHTML = filas.join("");
+    $("metricas-tac").textContent =
+      tac.instructionCount + " instr TAC \u00b7 " + tac.functions.length + " rutinas";
+
+    if (tac.issues && tac.issues.length) {
+      contenedor.insertAdjacentHTML(
+        "afterbegin",
+        '<div class="vacio fallo">El validador encontro ' + tac.issues.length +
+          " problema(s) en el codigo generado.</div>"
+      );
+    }
+  }
+
+  async function ejecutar() {
+    if (!editor) return;
+    seleccionarPestana("ejecucion");
+    const consola = $("ejecucion");
+    consola.textContent = "Ejecutando...";
+    ponerEstado("Ejecutando...", "trabajando");
+
+    try {
+      const respuesta = await fetch("/api/ejecutar", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ codigo: editor.getValue() })
+      });
+      const datos = await respuesta.json();
+      const lineas = datos.salida || [];
+      let texto = lineas.length ? lineas.join("\n") : "(el programa no imprimio nada)";
+      if (datos.error) {
+        texto += "\n\n>> " + datos.error;
+        ponerEstado("Ejecucion interrumpida", "fallo");
+      } else {
+        texto += "\n\n>> Programa finalizado.";
+        ponerEstado("Ejecucion terminada", "ok");
+      }
+      consola.textContent = texto;
+    } catch (error) {
+      consola.textContent = "No se pudo ejecutar: " + error;
+      ponerEstado("Error de ejecucion", "fallo");
+    }
+  }
+
+  function seleccionarPestana(vista) {
+    const boton = document.querySelector('.pestana[data-vista="' + vista + '"]');
+    if (boton) boton.click();
+  }
+
   // =========================================================================
   // Catalogo de reglas
   // =========================================================================
@@ -855,6 +953,23 @@ print("Total: " + total(carrito));
 
   function conectarInterfaz() {
     $("btn-compilar").addEventListener("click", analizar);
+    $("btn-ejecutar").addEventListener("click", ejecutar);
+
+    // Codigo intermedio: los tres controles repintan sin volver a compilar.
+    ["chk-tac-numerar", "chk-tac-comentarios"].forEach((id) =>
+      $(id).addEventListener("change", () => {
+        if (ultimoResultado) pintarTac(ultimoResultado.tac);
+      })
+    );
+    $("filtro-tac").addEventListener("input", () => {
+      if (ultimoResultado) pintarTac(ultimoResultado.tac);
+    });
+    $("btn-tac-copiar").addEventListener("click", () => {
+      if (!ultimoResultado || !ultimoResultado.tac) return;
+      navigator.clipboard.writeText(ultimoResultado.tac.text);
+      $("btn-tac-copiar").textContent = "Copiado";
+      setTimeout(() => ($("btn-tac-copiar").textContent = "Copiar"), 1200);
+    });
 
     // El modo del arbol se recuerda entre sesiones; compacto por defecto.
     const guardado = localStorage.getItem("compiscript:modoArbol");

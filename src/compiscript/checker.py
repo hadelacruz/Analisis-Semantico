@@ -18,7 +18,7 @@ ese mismo código es el que verifica la batería de tests.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Optional
 
 from antlr4 import ParserRuleContext
@@ -63,6 +63,29 @@ def _de(descripcion: str) -> str:
 
 
 @dataclass
+class Annotations:
+    """Decoraciones que el análisis semántico deja sobre el árbol.
+
+    La fase de generación de código intermedio vuelve a recorrer el mismo
+    árbol, pero **no repite ninguna resolución de nombres ni inferencia de
+    tipos**: lee de aquí lo que esta fase ya dedujo. Es la forma en que la
+    tabla de símbolos "interactúa con cada fase de la compilación".
+
+    Las claves son los nodos del árbol (se comparan por identidad).
+    """
+
+    #: Nodo de expresión -> tipo estático inferido.
+    types: dict = field(default_factory=dict)
+    #: Átomo o sufijo de un ``leftHandSide`` -> el :class:`LValue` resultante,
+    #: que lleva el símbolo resuelto, la clase propietaria y el tipo.
+    lvalues: dict = field(default_factory=dict)
+    #: Declaración o asignación -> símbolo afectado.
+    symbols: dict = field(default_factory=dict)
+    #: Llamada o acceso a miembro -> clase sobre la que se resolvió.
+    owners: dict = field(default_factory=dict)
+
+
+@dataclass
 class LValue:
     """Resultado de analizar un ``leftHandSide``.
 
@@ -94,12 +117,15 @@ class SemanticChecker(CompiscriptVisitor):
         self.class_stack: list[ClassSymbol] = []
         #: Tipo inferido de cada nodo de expresión (lo consume el visor de árbol).
         self.node_types: dict[int, str] = {}
+        #: Decoraciones para la fase de código intermedio.
+        self.annotations = Annotations()
 
     # ======================================================================
     # Utilidades
     # ======================================================================
     def _record(self, ctx: ParserRuleContext, type_: Type) -> Type:
         self.node_types[id(ctx)] = str(type_)
+        self.annotations.types[ctx] = type_
         return type_
 
     def _err(self, code: str, message: str, ctx) -> None:
@@ -238,6 +264,7 @@ class SemanticChecker(CompiscriptVisitor):
             if literal is not None:
                 symbol.array_length = len(literal.expression())
         self.table.declare(symbol)
+        self.annotations.symbols[ctx] = symbol
         self.node_types[id(ctx)] = f"{keyword} {name}: {final_type}"
         return None
 
@@ -356,6 +383,7 @@ class SemanticChecker(CompiscriptVisitor):
             if literal is not None:
                 symbol.array_length = len(literal.expression())
         self.table.declare(symbol)
+        self.annotations.symbols[ctx] = symbol
         return None
 
     # ======================================================================
@@ -368,15 +396,17 @@ class SemanticChecker(CompiscriptVisitor):
         if len(expressions) == 1:
             # Identifier '=' expression ';'
             value_type = self.visit(expressions[0])
-            self._assign_to_name(token, value_type, expressions[0])
+            self._assign_to_name(token, value_type, expressions[0], record_on=ctx)
         else:
             # expression '.' Identifier '=' expression ';'
             object_type = self.visit(expressions[0])
             value_type = self.visit(expressions[1])
-            self._assign_to_property(object_type, token, value_type, expressions[1])
+            self._assign_to_property(
+                object_type, token, value_type, expressions[1], record_on=ctx
+            )
         return None
 
-    def _assign_to_name(self, token, value_type: Type, value_ctx) -> None:
+    def _assign_to_name(self, token, value_type: Type, value_ctx, *, record_on=None) -> None:
         name = token.text
         found = self.table.resolve_with_capture(name)
         if found is None:
@@ -384,6 +414,8 @@ class SemanticChecker(CompiscriptVisitor):
             self._err_token("E201", f"La variable '{name}' no esta declarada.", token)
             return
         symbol, _ = found
+        if record_on is not None:
+            self.annotations.symbols[record_on] = symbol
 
         if isinstance(symbol, (FunctionSymbol, ClassSymbol)):
             # E203 — el nombre existe pero no designa un valor asignable
@@ -413,7 +445,9 @@ class SemanticChecker(CompiscriptVisitor):
             return
         symbol.initialized = True
 
-    def _assign_to_property(self, object_type: Type, token, value_type: Type, value_ctx) -> None:
+    def _assign_to_property(
+        self, object_type: Type, token, value_type: Type, value_ctx, *, record_on=None
+    ) -> None:
         name = token.text
         if object_type.is_error:
             return
@@ -448,6 +482,9 @@ class SemanticChecker(CompiscriptVisitor):
 
         owner = object_type.owner_of(name)
         field_symbol = owner.symbol.fields.get(name) if owner and owner.symbol else None
+        if record_on is not None:
+            self.annotations.symbols[record_on] = field_symbol
+            self.annotations.owners[record_on] = object_type
         if field_symbol is not None and field_symbol.category is SymbolCategory.CONSTANT:
             self._err_token(
                 "E107",
@@ -661,16 +698,16 @@ class SemanticChecker(CompiscriptVisitor):
         line = ctx.start.line
         self.table.push(ScopeKind.BLOCK, f"bloque foreach (linea {line})", line=line)
         tline, tcol, _, _ = token_span(token)
-        self.table.declare(
-            VariableSymbol(
-                name=token.text,
-                category=SymbolCategory.VARIABLE,
-                type=element_type,
-                line=tline,
-                column=tcol,
-                initialized=True,
-            )
+        loop_symbol = VariableSymbol(
+            name=token.text,
+            category=SymbolCategory.VARIABLE,
+            type=element_type,
+            line=tline,
+            column=tcol,
+            initialized=True,
         )
+        self.table.declare(loop_symbol)
+        self.annotations.symbols[ctx] = loop_symbol
         self.loop_depth += 1
         self._visit_block(ctx.block(), "foreach")
         self.loop_depth -= 1
@@ -687,16 +724,16 @@ class SemanticChecker(CompiscriptVisitor):
         tline, tcol, _, _ = token_span(token)
         # Decisión de diseño: el objeto de error de 'catch' es un string con el
         # mensaje (ver docs/ARQUITECTURA.md, "Supuestos del lenguaje").
-        self.table.declare(
-            VariableSymbol(
-                name=token.text,
-                category=SymbolCategory.VARIABLE,
-                type=STRING,
-                line=tline,
-                column=tcol,
-                initialized=True,
-            )
+        catch_symbol = VariableSymbol(
+            name=token.text,
+            category=SymbolCategory.VARIABLE,
+            type=STRING,
+            line=tline,
+            column=tcol,
+            initialized=True,
         )
+        self.table.declare(catch_symbol)
+        self.annotations.symbols[ctx] = catch_symbol
         self._visit_statement_list(blocks[1].statement())
         self.table.pop()
         return None
@@ -834,7 +871,13 @@ class SemanticChecker(CompiscriptVisitor):
     def visitPropertyAssignExpr(self, ctx: P.PropertyAssignExprContext):
         object_type = self._analyze_left_hand_side(ctx.lhs, reading=True).type
         value_type = self.visit(ctx.assignmentExpr())
-        self._assign_to_property(object_type, ctx.Identifier().getSymbol(), value_type, ctx.assignmentExpr())
+        self._assign_to_property(
+            object_type,
+            ctx.Identifier().getSymbol(),
+            value_type,
+            ctx.assignmentExpr(),
+            record_on=ctx,
+        )
         return self._record(ctx, value_type)
 
     def _check_assignment_target(self, target: LValue, value_type: Type, ctx) -> None:
@@ -1101,12 +1144,15 @@ class SemanticChecker(CompiscriptVisitor):
 
     def _analyze_atom(self, ctx, *, reading: bool) -> LValue:
         if isinstance(ctx, P.IdentifierExprContext):
-            return self._analyze_identifier(ctx, reading=reading)
-        if isinstance(ctx, P.NewExprContext):
-            return self._analyze_new(ctx)
-        if isinstance(ctx, P.ThisExprContext):
-            return self._analyze_this(ctx)
-        return LValue(ERROR)
+            info = self._analyze_identifier(ctx, reading=reading)
+        elif isinstance(ctx, P.NewExprContext):
+            info = self._analyze_new(ctx)
+        elif isinstance(ctx, P.ThisExprContext):
+            info = self._analyze_this(ctx)
+        else:  # pragma: no cover - la gramatica no permite otra cosa
+            info = LValue(ERROR)
+        self.annotations.lvalues[ctx] = info
+        return info
 
     def _analyze_identifier(self, ctx: P.IdentifierExprContext, *, reading: bool) -> LValue:
         token = ctx.Identifier().getSymbol()
@@ -1220,12 +1266,20 @@ class SemanticChecker(CompiscriptVisitor):
     # -- sufijos -------------------------------------------------------------
     def _apply_suffix(self, info: LValue, suffix) -> LValue:
         if isinstance(suffix, P.CallExprContext):
-            return self._apply_call(info, suffix)
-        if isinstance(suffix, P.IndexExprContext):
-            return self._apply_index(info, suffix)
-        if isinstance(suffix, P.PropertyAccessExprContext):
-            return self._apply_property(info, suffix)
-        return LValue(ERROR)
+            # Antes de consumirlo, anotamos a quien se esta llamando: el
+            # generador lo necesita para decidir entre llamada directa y
+            # despacho por tabla de metodos.
+            self.annotations.symbols[suffix] = info.symbol
+            self.annotations.owners[suffix] = info.owner_class
+            result = self._apply_call(info, suffix)
+        elif isinstance(suffix, P.IndexExprContext):
+            result = self._apply_index(info, suffix)
+        elif isinstance(suffix, P.PropertyAccessExprContext):
+            result = self._apply_property(info, suffix)
+        else:  # pragma: no cover - la gramatica no permite otra cosa
+            result = LValue(ERROR)
+        self.annotations.lvalues[suffix] = result
+        return result
 
     def _apply_call(self, info: LValue, suffix: P.CallExprContext) -> LValue:
         if info.type.is_error:

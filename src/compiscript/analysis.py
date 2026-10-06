@@ -33,6 +33,9 @@ from .generated.CompiscriptLexer import CompiscriptLexer
 from .generated.CompiscriptParser import CompiscriptParser
 from .scope import SymbolTable
 from .syntax import parse_source
+from .tac import TACProgram, generate_tac
+from .tac.validator import TACIssue, validate as validate_tac
+from .tac.vm import TACAbort, TACVirtualMachine
 from .tree_export import tree_to_dict, tree_to_dot, tree_to_text
 
 
@@ -50,6 +53,12 @@ class AnalysisResult:
     #: ``False`` si hubo errores de sintaxis y no se llegó a la fase semántica.
     semantic_ran: bool = True
 
+    # --- fase de código intermedio ----------------------------------------
+    #: Programa en código de tres direcciones; ``None`` si no se generó.
+    tac: Optional[TACProgram] = None
+    #: Problemas estructurales detectados en el código generado.
+    tac_issues: list[TACIssue] = field(default_factory=list)
+
     # -- consultas rápidas --------------------------------------------------
     @property
     def errors(self) -> list[Diagnostic]:
@@ -63,6 +72,11 @@ class AnalysisResult:
     def ok(self) -> bool:
         """``True`` si el programa es válido (puede tener advertencias)."""
         return not self.errors
+
+    @property
+    def tac_ok(self) -> bool:
+        """``True`` si se generó código intermedio y está bien formado."""
+        return self.tac is not None and not self.tac_issues
 
     def codes(self) -> list[str]:
         return [d.code for d in self.diagnostics]
@@ -108,6 +122,31 @@ class AnalysisResult:
             compact=compact,
         )
 
+    def tac_text(self, *, numbered: bool = False, comments: bool = True) -> str:
+        """El código intermedio en texto, listo para guardar en un ``.tac``."""
+        return self.tac.text(numbered=numbered, comments=comments) if self.tac else ""
+
+    def tac_dict(self) -> Optional[dict]:
+        if self.tac is None:
+            return None
+        datos = self.tac.to_dict()
+        datos["issues"] = [i.to_dict() for i in self.tac_issues]
+        return datos
+
+    def run(self, *, max_steps: int = 2_000_000) -> tuple[list[str], Optional[str]]:
+        """Ejecuta el código intermedio en la máquina virtual.
+
+        Devuelve ``(lineas_impresas, error)``; ``error`` es ``None`` si el
+        programa terminó bien.
+        """
+        if self.tac is None:
+            return [], "no hay codigo intermedio que ejecutar"
+        maquina = TACVirtualMachine(self.tac, max_steps=max_steps)
+        try:
+            return maquina.run(), None
+        except TACAbort as fallo:
+            return maquina.output, str(fallo)
+
     def symbols_dict(self) -> Optional[dict]:
         return self.symbol_table.to_dict() if self.symbol_table else None
 
@@ -151,6 +190,7 @@ class AnalysisResult:
             "treeCompact": self.tree_dict(compact=True),
             "symbols": self.symbols_dict(),
             "tokens": self.tokens_list(),
+            "tac": self.tac_dict(),
         }
 
     def format_diagnostics(self) -> str:
@@ -179,8 +219,18 @@ def _token_name(token_type: int) -> str:
     return str(token_type)
 
 
-def analyze(source: str, filename: str = "<memoria>") -> AnalysisResult:
-    """Analiza ``source`` y devuelve el resultado completo del front-end."""
+def analyze(
+    source: str,
+    filename: str = "<memoria>",
+    *,
+    intermediate: bool = True,
+    bounds_checks: bool = True,
+) -> AnalysisResult:
+    """Analiza ``source`` y devuelve el resultado completo del front-end.
+
+    Si ``intermediate`` es ``True`` y el programa es semánticamente válido,
+    genera además el código de tres direcciones.
+    """
     reporter = ErrorReporter()
     tree, tokens = parse_source(source, reporter)
 
@@ -208,16 +258,40 @@ def analyze(source: str, filename: str = "<memoria>") -> AnalysisResult:
     result.checker = checker
     result.symbol_table = checker.table
     result.diagnostics = reporter.diagnostics
+
+    # --- fase 3: codigo intermedio ---------------------------------------
+    # Solo tiene sentido traducir un programa que ya paso el analisis
+    # semantico: traducir codigo con errores produciria basura.
+    if intermediate and not reporter.has_errors:
+        try:
+            result.tac = generate_tac(
+                tree,
+                checker.table,
+                checker.annotations,
+                checker.collector,
+                bounds_checks=bounds_checks,
+            )
+            result.tac_issues = validate_tac(result.tac)
+        except Exception as exc:  # pragma: no cover - red de seguridad
+            reporter.error(
+                "E002",
+                f"Error interno del generador de codigo intermedio: "
+                f"{exc.__class__.__name__}: {exc}",
+                1,
+                1,
+            )
+            result.diagnostics = reporter.diagnostics
+            traceback.print_exc()
     return result
 
 
-def analyze_source(source: str, filename: str = "<memoria>") -> AnalysisResult:
+def analyze_source(source: str, filename: str = "<memoria>", **kwargs) -> AnalysisResult:
     """Alias explícito de :func:`analyze`."""
-    return analyze(source, filename)
+    return analyze(source, filename, **kwargs)
 
 
-def analyze_file(path: str | Path) -> AnalysisResult:
+def analyze_file(path: str | Path, **kwargs) -> AnalysisResult:
     """Analiza un archivo ``.cps`` del disco."""
     file_path = Path(path)
     source = file_path.read_text(encoding="utf-8")
-    return analyze(source, filename=file_path.name)
+    return analyze(source, filename=file_path.name, **kwargs)

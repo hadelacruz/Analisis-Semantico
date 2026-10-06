@@ -76,6 +76,53 @@ def assert_clean(source: str) -> AnalysisResult:
     return result
 
 
+# ---------------------------------------------------------------------------
+# Ayudantes de la fase de codigo intermedio
+# ---------------------------------------------------------------------------
+
+def compilar(source: str) -> AnalysisResult:
+    """Compila hasta codigo intermedio y exige que el programa sea valido."""
+    result = analyze(source, filename="<test>")
+    assert result.ok, "el programa deberia compilar sin errores:\n  " + "\n  ".join(
+        str(d) for d in result.errors
+    )
+    assert result.tac is not None, "no se genero codigo intermedio"
+    assert not result.tac_issues, (
+        "el validador encontro problemas en el codigo generado:\n  "
+        + "\n  ".join(str(i) for i in result.tac_issues)
+    )
+    return result
+
+
+def tac_de(source: str):
+    """El programa TAC de un fragmento valido."""
+    return compilar(source).tac
+
+
+def tac_texto(source: str) -> str:
+    """El codigo intermedio en texto, sin comentarios."""
+    return compilar(source).tac_text(comments=False)
+
+
+def ejecutar(source: str) -> list[str]:
+    """Compila y ejecuta; devuelve las lineas impresas."""
+    salida, fallo = compilar(source).run()
+    assert fallo is None, f"la ejecucion se interrumpio: {fallo}"
+    return salida
+
+
+def ejecutar_con_fallo(source: str) -> tuple[list[str], str]:
+    """Compila y ejecuta esperando que el programa aborte."""
+    salida, fallo = compilar(source).run()
+    assert fallo is not None, "se esperaba que la ejecucion abortara"
+    return salida, fallo
+
+
+def instrucciones(source: str, op: str) -> list:
+    """Cuadruplas de un tipo concreto dentro del codigo generado."""
+    return [q for q in tac_de(source).instructions if q.op.value == op]
+
+
 def expected_annotations(source: str) -> set[tuple[int, str]]:
     """Pares ``(linea, codigo)`` anotados con ``@error`` / ``@warning``."""
     found: set[tuple[int, str]] = set()
@@ -96,3 +143,9 @@ def expected_annotations(source: str) -> set[tuple[int, str]]:
 def analizar():
     """Fixture equivalente a :func:`check`, por comodidad."""
     return check
+
+
+@pytest.fixture(params=sorted((PROGRAMS / "valid").glob("*.cps")), ids=lambda p: p.name)
+def programa_valido(request):
+    """Cada uno de los programas .cps validos del repositorio."""
+    return request.param

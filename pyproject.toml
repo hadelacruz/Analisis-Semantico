@@ -35,4 +35,6 @@ markers = [
     "listas: reglas de listas y estructuras (E6xx)",
     "generales: reglas generales y advertencias (E7xx, W9xx)",
     "tabla: tabla de simbolos y entornos",
+    "tac: generacion de codigo intermedio (fase 2)",
+    "vm: ejecucion del codigo intermedio",
 ]

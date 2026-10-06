@@ -24,6 +24,10 @@
       <span>&#9654;</span> Compilar
     </button>
 
+    <button id="btn-ejecutar" class="btn btn-secundario" title="Ejecuta el codigo intermedio (F6)">
+      <span>&#9889;</span> Ejecutar
+    </button>
+
     <label class="interruptor" title="Analizar mientras se escribe">
       <input type="checkbox" id="chk-auto" checked>
       <span>Auto</span>
@@ -58,6 +62,7 @@
     <nav class="pestanas" id="pestanas-lateral">
       <button class="pestana activa" data-vista="arbol">Arbol sintactico</button>
       <button class="pestana" data-vista="simbolos">Tabla de simbolos</button>
+      <button class="pestana" data-vista="tac">Codigo intermedio</button>
       <button class="pestana" data-vista="tokens">Tokens</button>
       <button class="pestana" data-vista="reglas">Reglas</button>
     </nav>
@@ -111,6 +116,20 @@
         <div id="simbolos" class="scroll"></div>
       </div>
 
+      <div class="vista" id="vista-tac">
+        <div class="herramientas">
+          <label class="interruptor mini">
+            <input type="checkbox" id="chk-tac-numerar"><span>Numerar</span>
+          </label>
+          <label class="interruptor mini">
+            <input type="checkbox" id="chk-tac-comentarios" checked><span>Comentarios</span>
+          </label>
+          <input type="search" id="filtro-tac" class="control" placeholder="Filtrar rutina...">
+          <button class="btn btn-mini" id="btn-tac-copiar">Copiar</button>
+        </div>
+        <div id="tac" class="scroll"></div>
+      </div>
+
       <div class="vista" id="vista-tokens">
         <div id="tokens" class="scroll"></div>
       </div>
@@ -132,12 +151,16 @@
     <button class="pestana activa" data-vista="problemas">
       Problemas <span id="insignia-problemas" class="insignia">0</span>
     </button>
+    <button class="pestana" data-vista="ejecucion">Ejecucion</button>
     <button class="pestana" data-vista="salida">Salida</button>
   </nav>
 
   <div class="contenido-inferior">
     <div class="vista activa" id="vista-problemas">
       <div id="problemas" class="scroll"></div>
+    </div>
+    <div class="vista" id="vista-ejecucion">
+      <pre id="ejecucion" class="scroll consola"></pre>
     </div>
     <div class="vista" id="vista-salida">
       <pre id="salida" class="scroll consola"></pre>
@@ -152,6 +175,8 @@
   <span id="conteo-avisos" class="contador aviso">0 avisos</span>
   <span class="separador-estado"></span>
   <span id="tiempo" class="meta"></span>
+  <span class="separador-estado"></span>
+  <span id="metricas-tac" class="meta"></span>
   <span class="crece"></span>
   <span class="meta">Compiscript &middot; ANTLR 4.13.1</span>
 </div>

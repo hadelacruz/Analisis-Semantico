@@ -55,6 +55,28 @@ def api_analizar():
     return jsonify(resultado.to_dict())
 
 
+@app.post("/api/ejecutar")
+def api_ejecutar():
+    """Compila el codigo y lo ejecuta en la maquina virtual del TAC."""
+    payload = request.get_json(silent=True) or {}
+    source = payload.get("codigo", "")
+    if not isinstance(source, str):
+        return jsonify({"error": "El campo 'codigo' debe ser texto."}), 400
+
+    resultado = analyze(source, filename=payload.get("nombre", "editor.cps"))
+    if not resultado.ok:
+        return jsonify(
+            {
+                "ok": False,
+                "salida": [],
+                "error": "El programa tiene errores: corrigelos antes de ejecutar.",
+            }
+        )
+
+    salida, fallo = resultado.run()
+    return jsonify({"ok": fallo is None, "salida": salida, "error": fallo})
+
+
 @app.get("/api/reglas")
 def api_reglas():
     """Catálogo de reglas semánticas, para el panel de ayuda del IDE."""

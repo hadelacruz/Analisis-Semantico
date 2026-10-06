@@ -1,13 +1,20 @@
-# 🧪 Compiscript — Analizador Sintáctico y Semántico
+# 🧪 Compiscript — Compilador
 
-Front-end completo de un compilador para **Compiscript**, un subconjunto de
-TypeScript. Cubre las fases de análisis **léxico**, **sintáctico** y
-**semántico**, construye una **tabla de símbolos** con manejo de entornos e
-incluye un **IDE web** para escribir y compilar código.
+Compilador para **Compiscript**, un subconjunto de TypeScript. Cubre el
+análisis **léxico**, **sintáctico** y **semántico**, construye una **tabla de
+símbolos** con manejo de entornos y registros de activación, genera **código
+intermedio de tres direcciones (TAC)** y trae un **IDE web** para escribir,
+compilar y **ejecutar** código.
 
-> Fase 1 del proyecto de Compiladores. Análisis léxico y sintáctico con
-> **ANTLR 4.13.1**; análisis semántico implementado sobre un *Visitor* en
-> Python.
+```
+programa.cps  ──►  ANTLR  ──►  Analisis semantico  ──►  TAC  ──►  [MIPS]
+                  lexer+parser    tipos, ambitos       codigo de     fase
+                                  tabla de simbolos    3 direcciones futura
+```
+
+> Fases 1 y 2 del proyecto de Compiladores. Análisis léxico y sintáctico con
+> **ANTLR 4.13.1**; análisis semántico y generación de código intermedio
+> implementados sobre *Visitors* en Python.
 
 ---
 
@@ -29,6 +36,12 @@ python -m compiscript mi_programa.cps --symbols --tree
 
 # El árbol completo, con todos los nodos de la gramática
 python -m compiscript mi_programa.cps --tree-completo
+
+# Ver el código intermedio generado
+python -m compiscript mi_programa.cps --tac
+
+# Ejecutarlo en la máquina virtual del TAC
+python -m compiscript mi_programa.cps --run
 
 # Levantar el IDE  ->  http://127.0.0.1:5000
 python ide/app.py
@@ -67,11 +80,15 @@ docker run --rm -v "$(pwd):/trabajo" compiscript cli /trabajo/programa.cps
 | **Problemas** | Errores y advertencias con código, categoría y ubicación; al hacer clic salta a la línea |
 | **Árbol sintáctico** | Dos vistas — **Indentado** (jerárquico plegable) y **Gráfico** (nodos y aristas en SVG con zoom, desplazamiento y salto a la línea al hacer clic) — y dos niveles de detalle: **Compacto** (por defecto; colapsa la cascada de precedencia de ANTLR, ~55 % menos nodos) y **Completo**. Cada expresión muestra su **tipo inferido** |
 | **Tabla de símbolos** | Ámbitos anidados con tipo, categoría, almacenamiento, offset, tamaño y capturas de closures |
+| **Código intermedio** | El TAC generado, con numeración opcional y filtro por rutina |
+| **Ejecución** | La salida real del programa, ejecutado sobre el TAC |
 | **Tokens** | Volcado del flujo léxico |
 | **Reglas** | Catálogo consultable de las 53 reglas semánticas implementadas |
 
 Los errores se subrayan en el editor en tiempo real (análisis automático con
-retardo de 450 ms) o al pulsar **Compilar** / `Ctrl+Enter`.
+retardo de 450 ms) o al pulsar **Compilar** / `Ctrl+Enter`. El botón
+**Ejecutar** (`F6`) compila a código intermedio y lo corre en la máquina
+virtual, mostrando lo que el programa imprime.
 
 ---
 
@@ -94,10 +111,17 @@ Analisis-Semantico/
 │   ├── checker.py                PASADA 2 — comprobación semántica (Visitor)
 │   ├── syntax.py                 puente con ANTLR y errores de sintaxis
 │   ├── tree_export.py            árbol → JSON / DOT / texto
+│   ├── tac/                      FASE 2 — código intermedio
+│   │   ├── quadruple.py          cuádruplas, operandos, programa TAC
+│   │   ├── temporaries.py        pool de temporales con reciclaje
+│   │   ├── runtime.py            rutinas de apoyo (__print, __concat, …)
+│   │   ├── generator.py          PASADA 3 — Compiscript → TAC
+│   │   ├── validator.py          invariantes del código generado
+│   │   └── vm.py                 máquina virtual que ejecuta el TAC
 │   ├── analysis.py               orquestador (API pública)
 │   └── cli.py                    línea de comandos
 ├── ide/                          IDE web (Flask + Monaco)
-├── tests/                        batería de 377 tests
+├── tests/                        batería de 571 tests
 │   └── programs/{valid,invalid}  programas .cps completos
 ├── docs/                         documentación de arquitectura y ejecución
 └── tools/generate_parser.py      regeneración del parser desde la gramática
@@ -112,6 +136,7 @@ Analisis-Semantico/
 | [`docs/ARQUITECTURA.md`](docs/ARQUITECTURA.md) | Diseño del compilador, las dos pasadas, sistema de tipos, tabla de símbolos, decisiones de diseño |
 | [`docs/EJECUCION.md`](docs/EJECUCION.md) | Cómo instalar, ejecutar, regenerar el parser y usar el IDE |
 | [`docs/REGLAS_SEMANTICAS.md`](docs/REGLAS_SEMANTICAS.md) | Las 53 reglas con su código, ejemplo del error y test que la cubre |
+| [`docs/CODIGO_INTERMEDIO.md`](docs/CODIGO_INTERMEDIO.md) | **Diseño del lenguaje intermedio**: repertorio de instrucciones, modelo de memoria, registros de activación, esquemas de traducción y supuestos |
 | [`docs/GUION_DEMO.md`](docs/GUION_DEMO.md) | Guion de la demostración, con el mapa paso → requerimiento de la rúbrica |
 
 ---
@@ -130,10 +155,31 @@ Analisis-Semantico/
 | 2.6 | Listas y estructuras | `checker.py` + reglas `E6xx` |
 | 2.7 | Generales (código muerto, duplicados…) | `checker.py` + reglas `E7xx` / `W9xx` |
 | 3 | Recorrido con Visitor de ANTLR | `checker.py` (`CompiscriptVisitor`) |
-| 4 | Batería de tests de casos exitosos y fallidos | `tests/` — 377 tests |
+| 4 | Batería de tests de casos exitosos y fallidos | `tests/` — 571 tests |
 | 5 | Tabla de símbolos con entornos | `symbols.py`, `scope.py` |
 | 6 | IDE | `ide/` |
 | 7 | Documentación | `docs/` |
+
+### Fase 2 — Generación de código intermedio
+
+| Requerimiento del enunciado | Dónde está |
+| --- | --- |
+| Acciones semánticas para generar código intermedio | `tac/generator.py` (pasada 3) |
+| Sintaxis del CI a discreción del diseñador | [`docs/CODIGO_INTERMEDIO.md`](docs/CODIGO_INTERMEDIO.md) |
+| Tabla de símbolos con direcciones y etiquetas | `symbols.py` — `storage`, `offset`, `size`, `label`, `vtable_slots` |
+| **Algoritmo de asignación y reciclaje de temporales** | `tac/temporaries.py` — `TempPool` |
+| Registros de activación | `symbols.py` — `ActivationRecord`; CLI `--frames` |
+| Batería de tests (casos exitosos y fallidos) | `tests/test_tac_*.py` |
+| IDE que compile el código del usuario | pestañas *Código intermedio* y *Ejecución* |
+| Documentación de la arquitectura | [`docs/ARQUITECTURA.md`](docs/ARQUITECTURA.md) |
+| **Documentación detallada del lenguaje intermedio** | [`docs/CODIGO_INTERMEDIO.md`](docs/CODIGO_INTERMEDIO.md) |
+
+Extras que no pedía el enunciado pero respaldan la corrección de la traducción:
+
+| Extra | Para qué |
+| --- | --- |
+| `tac/validator.py` | Comprueba 10 invariantes del código generado; aporta los *casos fallidos* de la batería |
+| `tac/vm.py` | **Ejecuta** el TAC: los tests verifican que `factorial(5)` da `120`, no sólo que el código "se parezca" |
 
 ---
 
@@ -199,7 +245,7 @@ El detalle de ésta y del resto de decisiones de diseño está en
 ## 🧪 Estado de la batería de tests
 
 ```
-377 passed
+571 passed
 ```
 
 ```bash
@@ -209,4 +255,9 @@ python -m pytest tests/ -m clases          # sólo clases y objetos
 ```
 
 Marcas disponibles: `tipos`, `ambito`, `funciones`, `flujo`, `clases`,
-`listas`, `generales`, `tabla`.
+`listas`, `generales`, `tabla`, `tac`, `vm`.
+
+```bash
+python -m pytest tests/ -m tac    # solo la fase de codigo intermedio
+python -m pytest tests/ -m vm     # solo la ejecucion del TAC
+```

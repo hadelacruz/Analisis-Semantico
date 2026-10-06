@@ -88,6 +88,12 @@ Resultado: 1 error(es).
 | `--json` | Emite todo el resultado en JSON |
 | `--quiet`, `-q` | Sólo el código de salida |
 | `--no-color` | Desactiva los colores ANSI |
+| `--tac` | Imprime el código intermedio de tres direcciones |
+| `--tac-numerado` | Con `--tac`, numera cada instrucción |
+| `--tac-out ARCHIVO` | Escribe el código intermedio en un `.tac` |
+| `--frames` | Imprime el registro de activación de cada rutina |
+| `--run`, `-r` | **Ejecuta** el código intermedio en la máquina virtual |
+| `--sin-chequeos` | No emite las comprobaciones de rango al indexar |
 
 **Código de salida:** `0` si el programa es válido, `1` si hay errores, `2` si
 no se encontró el archivo. Las advertencias no cambian el código de salida, lo
@@ -109,6 +115,22 @@ dot -Tsvg arbol.dot -o arbol.svg
 
 # Integración con otras herramientas
 python -m compiscript programa.cps --json | jq '.diagnostics[].code'
+```
+
+### Código intermedio
+
+```bash
+# Ver el TAC generado
+python -m compiscript programa.cps --tac
+
+# Ejecutarlo y ver lo que imprime el programa
+python -m compiscript programa.cps --run
+
+# Guardarlo para inspeccionarlo o pasarlo a la siguiente fase
+python -m compiscript programa.cps --tac-out programa.tac
+
+# Ver la distribucion del marco de cada rutina
+python -m compiscript programa.cps --frames
 ```
 
 ---
@@ -168,6 +190,8 @@ python -m pytest tests/ -m clases      # clases y objetos (E5xx)
 python -m pytest tests/ -m listas      # listas (E6xx)
 python -m pytest tests/ -m generales   # generales y avisos (E7xx, W9xx)
 python -m pytest tests/ -m tabla       # tabla de simbolos
+python -m pytest tests/ -m tac         # codigo intermedio (fase 2)
+python -m pytest tests/ -m vm          # ejecucion del codigo intermedio
 ```
 
 ### Cobertura

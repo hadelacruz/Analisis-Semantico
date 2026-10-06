@@ -37,8 +37,10 @@ from .symbols import (
 from .syntax import span, token_span
 from .types import (
     ERROR,
+    OBJECT_HEADER_SIZE,
     PRIMITIVE_BY_NAME,
     VOID,
+    WORD,
     ArrayType,
     ClassType,
     Type,
@@ -226,10 +228,18 @@ class DeclarationCollector:
         scope = self.table.push(ScopeKind.CLASS, f"clase {symbol.name}", owner=symbol, line=line)
         symbol.class_scope = scope
 
-        # El layout de la instancia continua donde termina el de la superclase.
-        offset = symbol.superclass.instance_size if symbol.superclass else 0
+        # Todo objeto empieza con una cabecera: el puntero a su tabla de
+        # metodos. Los atributos van despues. En una subclase el layout
+        # continua donde termina el de la superclase, de modo que un atributo
+        # heredado ocupa siempre el mismo desplazamiento en toda la jerarquia:
+        # eso es lo que permite tratar un Perro como un Animal.
+        symbol.vtable_label = f"vtable_{symbol.name}"
         if symbol.superclass is not None:
+            offset = symbol.superclass.instance_size
             symbol.vtable.update(symbol.superclass.vtable)
+            symbol.vtable_slots.update(symbol.superclass.vtable_slots)
+        else:
+            offset = OBJECT_HEADER_SIZE
 
         for member in ctx.classMember():
             var_ctx = member.variableDeclaration()
@@ -361,6 +371,11 @@ class DeclarationCollector:
         if owner is not None:
             owner.methods[name] = symbol
             owner.vtable[name] = label
+            # Una sobrescritura reutiliza la ranura heredada (misma ranura =
+            # mismo metodo en toda la jerarquia); un metodo nuevo toma la
+            # siguiente libre. Asi el despacho dinamico es un simple indice.
+            if name not in owner.vtable_slots:
+                owner.vtable_slots[name] = len(owner.vtable_slots) * WORD
 
         # --- ambito propio: parametros + cuerpo -----------------------------
         scope_name = f"metodo {owner.name}.{name}" if owner is not None else f"funcion {name}"

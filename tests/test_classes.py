@@ -3,6 +3,8 @@ import pytest
 
 from conftest import assert_error, assert_ok, check
 
+from compiscript.types import OBJECT_HEADER_SIZE
+
 pytestmark = pytest.mark.clases
 
 ANIMAL = """
@@ -252,12 +254,14 @@ def test_layout_de_la_instancia_con_herencia():
     base = result.symbol_table.global_scope.resolve_local("Base")
     derivada = result.symbol_table.global_scope.resolve_local("Derivada")
 
-    assert base.fields["a"].offset == 0
-    assert base.fields["b"].offset == 4
-    assert base.instance_size == 8
+    # Todo objeto empieza con una cabecera de 4 bytes: el puntero a su tabla
+    # de metodos, que es lo que permite el despacho dinamico (fase de TAC).
+    assert base.fields["a"].offset == OBJECT_HEADER_SIZE
+    assert base.fields["b"].offset == OBJECT_HEADER_SIZE + 4
+    assert base.instance_size == OBJECT_HEADER_SIZE + 8
     # Los atributos propios continúan tras los heredados.
-    assert derivada.fields["c"].offset == 8
-    assert derivada.instance_size == 12
+    assert derivada.fields["c"].offset == base.instance_size
+    assert derivada.instance_size == base.instance_size + 4
 
 
 def test_la_vtable_registra_los_metodos_heredados_y_sobrescritos():

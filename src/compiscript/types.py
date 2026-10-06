@@ -25,6 +25,21 @@ from typing import Any, Optional, Sequence
 #: Tamaño de una palabra en la arquitectura objetivo (MIPS de 32 bits).
 WORD = 4
 
+# --- Distribución de la memoria dinámica ----------------------------------
+# Estas constantes las fija el diseño del código intermedio, pero viven aquí
+# porque el analizador semántico ya las necesita para calcular el layout de
+# los objetos (ver collector.py :: _build_class_members).
+
+#: Cabecera de todo objeto: un puntero a su tabla de métodos, en el byte 0.
+#: Es lo que hace posible el despacho dinámico.
+OBJECT_HEADER_SIZE = WORD
+#: Desplazamiento del puntero a la tabla de métodos dentro del objeto.
+VTABLE_POINTER_OFFSET = 0
+#: Cabecera de todo arreglo: su longitud, en el byte 0.
+ARRAY_HEADER_SIZE = WORD
+#: Desplazamiento donde vive la longitud del arreglo.
+ARRAY_LENGTH_OFFSET = 0
+
 
 # ===========================================================================
 # Jerarquía de tipos

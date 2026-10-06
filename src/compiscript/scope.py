@@ -233,8 +233,11 @@ class SymbolTable:
             symbol.offset = None
             return
 
-        if symbol.category is SymbolCategory.FIELD:
-            # El offset dentro del objeto lo fija el layout de la clase.
+        # Los atributos ya traen su desplazamiento dentro del objeto, que lo
+        # fija el layout de la clase (ver collector.py :: _declare_field). Se
+        # comprueba el 'storage' y no la categoria porque una constante
+        # declarada dentro de una clase tambien es un atributo.
+        if symbol.storage is StorageKind.FIELD or symbol.category is SymbolCategory.FIELD:
             symbol.storage = StorageKind.FIELD
             return
 

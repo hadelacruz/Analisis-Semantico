@@ -86,10 +86,47 @@ def _print_summary(result: AnalysisResult, color: bool) -> None:
         )
 
 
+def _tac_summary(result: AnalysisResult) -> str:
+    """Una linea con las metricas del codigo intermedio generado."""
+    programa = result.tac
+    if programa is None:
+        return ""
+    instrucciones = len([q for q in programa.instructions if q.op.value != "comment"])
+    return (
+        f"  {instrucciones} instrucciones  |  {len(programa.functions)} rutina(s)  |  "
+        f"{programa.temps_peak} temporal(es) simultaneos como maximo"
+    )
+
+
+def _frames_text(result: AnalysisResult) -> str:
+    """Distribucion del marco de cada rutina; es lo que consumira la fase de MIPS."""
+    if result.tac is None:
+        return "  (no se genero codigo intermedio)"
+    lineas: list[str] = []
+    for funcion in result.tac.functions:
+        lineas.append(
+            f"  {funcion.label}   marco={funcion.frame_size}B  "
+            f"parametros={funcion.param_size}B  locales={funcion.local_size}B  "
+            f"temporales={funcion.temp_count}"
+        )
+        simbolo = funcion.symbol
+        if simbolo is None or simbolo.activation_record is None:
+            continue
+        for fila in simbolo.activation_record.layout():
+            desplazamiento = fila["offset"]
+            signo = "+" if desplazamiento >= 0 else ""
+            etiqueta = f"fp{signo}{desplazamiento}"
+            lineas.append(f"      {etiqueta:<8} {fila['nombre']:<28} {fila['tam']} B")
+    return "\n".join(lineas)
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="compiscript",
-        description="Analizador sintactico y semantico de Compiscript.",
+        description=(
+            "Compilador de Compiscript: analisis sintactico, analisis "
+            "semantico y generacion de codigo intermedio (TAC)."
+        ),
     )
     parser.add_argument("archivo", help="archivo fuente .cps a analizar")
     parser.add_argument("--symbols", "-s", action="store_true", help="imprime la tabla de simbolos")
@@ -112,6 +149,30 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="con --dot, exporta el arbol completo en vez del compacto",
     )
+    parser.add_argument(
+        "--tac", action="store_true",
+        help="imprime el codigo intermedio de tres direcciones",
+    )
+    parser.add_argument(
+        "--tac-numerado", action="store_true",
+        help="con --tac, numera cada instruccion",
+    )
+    parser.add_argument(
+        "--tac-out", metavar="ARCHIVO",
+        help="escribe el codigo intermedio en un archivo .tac",
+    )
+    parser.add_argument(
+        "--frames", action="store_true",
+        help="imprime el registro de activacion de cada rutina",
+    )
+    parser.add_argument(
+        "--run", "-r", action="store_true",
+        help="ejecuta el codigo intermedio en la maquina virtual",
+    )
+    parser.add_argument(
+        "--sin-chequeos", action="store_true",
+        help="no emite las comprobaciones de rango al indexar arreglos",
+    )
     parser.add_argument("--json", action="store_true", help="emite el resultado completo en JSON")
     parser.add_argument("--quiet", "-q", action="store_true", help="solo el codigo de salida")
     parser.add_argument("--no-color", action="store_true", help="desactiva los colores ANSI")
@@ -133,7 +194,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"No se encontro el archivo '{path}'.", file=sys.stderr)
         return 2
 
-    result = analyze_file(path)
+    result = analyze_file(path, bounds_checks=not args.sin_chequeos)
 
     if args.json:
         print(json.dumps(result.to_dict(), indent=2, ensure_ascii=False))
@@ -168,6 +229,39 @@ def main(argv: list[str] | None = None) -> int:
         if args.symbols:
             print("\n" + _paint("== TABLA DE SIMBOLOS ==", "cyan", color))
             print(result.symbols_text())
+
+        if args.tac:
+            print()
+            print(_paint("== CODIGO INTERMEDIO (TAC) ==", "cyan", color))
+            if result.tac is None:
+                print(_paint("  (no se genero: el programa tiene errores)", "dim", color))
+            else:
+                print(result.tac_text(numbered=args.tac_numerado))
+                print(_paint(_tac_summary(result), "dim", color))
+
+        if args.frames:
+            print()
+            print(_paint("== REGISTROS DE ACTIVACION ==", "cyan", color))
+            print(_frames_text(result))
+
+        for issue in result.tac_issues:
+            print(_paint(f"  {issue}", "red", color))
+
+        if args.run:
+            print()
+            print(_paint("== EJECUCION ==", "cyan", color))
+            salida, fallo = result.run()
+            for linea in salida:
+                print("  " + linea)
+            if fallo:
+                print(_paint(f"  Abortado: {fallo}", "red", color))
+
+    if args.tac_out:
+        Path(args.tac_out).write_text(
+            result.tac_text(numbered=args.tac_numerado), encoding="utf-8"
+        )
+        if not args.quiet:
+            print(f"Codigo intermedio escrito en {args.tac_out}")
 
     if args.dot:
         Path(args.dot).write_text(

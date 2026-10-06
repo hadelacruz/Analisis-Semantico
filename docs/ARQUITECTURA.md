@@ -1,8 +1,12 @@
 # 🏗️ Arquitectura del compilador de Compiscript
 
-Documento de diseño de la fase de análisis semántico: cómo está organizado el
-compilador, por qué se tomó cada decisión y qué supuestos se hicieron sobre el
-lenguaje.
+Documento de diseño del compilador: cómo está organizado, por qué se tomó cada
+decisión y qué supuestos se hicieron sobre el lenguaje.
+
+Cubre las tres fases implementadas: análisis **léxico y sintáctico** (ANTLR),
+análisis **semántico** (visitor propio) y generación de **código intermedio**
+(TAC). El diseño del lenguaje intermedio tiene documento aparte:
+[`CODIGO_INTERMEDIO.md`](CODIGO_INTERMEDIO.md).
 
 ---
 
@@ -41,9 +45,24 @@ diagnósticos** y una **tabla de símbolos**. La generación de código intermed
         │  · indices y elementos                │  E6xx
         │  · codigo muerto, expresiones inutiles│  E7xx W9xx
         └───────────────────┬───────────────────┘
+                            │  tabla de simbolos poblada
+        ┌───────────────────▼───────────────────┐
+        │  PASADA 3 · TACGenerator              │
+        │  (Visitor; lee las anotaciones de la  │
+        │   pasada 2, no vuelve a resolver nada)│
+        │  · expresiones -> tres direcciones    │
+        │  · condiciones -> codigo por saltos   │
+        │  · rutinas, closures, clases, arreglos│
+        │  · reciclaje de temporales            │
+        └───────────────────┬───────────────────┘
+                            │  TACProgram
+        ┌───────────────────▼───────────────────┐
+        │  TACValidator     estructura correcta │  T001..T010
+        │  TACVirtualMachine  ejecuta y prueba  │
+        └───────────────────┬───────────────────┘
                             │
                      AnalysisResult
-              (diagnosticos + tabla + arbol)
+         (diagnosticos + tabla + arbol + codigo intermedio)
                    │              │
               ┌────▼────┐    ┌────▼────┐
               │   CLI   │    │   IDE   │
@@ -72,6 +91,12 @@ divergir.
 | `tree_export.py` | Árbol sintáctico → JSON (IDE), DOT (Graphviz) y texto (consola). |
 | `analysis.py` | Orquestador y `AnalysisResult`. |
 | `cli.py` | Interfaz de línea de comandos. |
+| `tac/quadruple.py` | Cuádruplas, operandos y el programa TAC completo. |
+| `tac/temporaries.py` | Pool de temporales con **reciclaje** y generador de etiquetas. |
+| `tac/runtime.py` | Rutinas de apoyo (`__print`, `__concat`, `__alloc`, …). |
+| `tac/generator.py` | Pasada 3. Traduce el árbol anotado a código de tres direcciones. |
+| `tac/validator.py` | Invariantes del código generado (`T001`–`T010`). |
+| `tac/vm.py` | Máquina virtual que ejecuta el TAC. |
 
 ---
 
@@ -298,6 +323,48 @@ nivel2.captures = {a}          // a atraviesa nivel2 para llegar a nivel3
 
 Los globales, las funciones y las clases no se capturan: no viven en un
 registro de activación.
+
+---
+
+## 6bis. La tercera pasada: código intermedio
+
+### El árbol anotado
+
+La pasada de código intermedio **no vuelve a resolver nombres ni a inferir
+tipos**. La pasada semántica deja decoraciones sobre el árbol
+(`checker.annotations`) y el generador se limita a leerlas:
+
+| Decoración | Contenido |
+| --- | --- |
+| `types` | nodo de expresión -> tipo estático inferido |
+| `lvalues` | átomo o sufijo -> símbolo resuelto, clase propietaria y tipo |
+| `symbols` | declaración o asignación -> símbolo afectado |
+| `owners` | llamada o acceso a miembro -> clase sobre la que se resolvió |
+
+Es la forma concreta en que la tabla de símbolos "interactúa con cada fase de
+la compilación": la fase 2 la puebla, la fase 3 la consume, y la fase de MIPS
+encontrará ahí los desplazamientos y tamaños que necesite.
+
+La alternativa —que el generador rehiciera el recorrido de ámbitos en paralelo—
+habría duplicado la lógica de resolución y sería una fuente permanente de bugs
+sutiles al menor cambio en una de las dos.
+
+### Qué añade a la tabla de símbolos
+
+| Campo nuevo | Dónde | Para qué |
+| --- | --- | --- |
+| `ActivationRecord` | `FunctionSymbol` | distribución completa del marco de pila |
+| `temp_count` | `FunctionSymbol` | temporales simultáneos que hay que reservar |
+| `vtable_slots` | `ClassSymbol` | ranura de cada método (despacho dinámico) |
+| `vtable_label` | `ClassSymbol` | etiqueta del bloque de la tabla de métodos |
+
+Y cambia el layout de los objetos: ahora todos empiezan con una cabecera de 4
+bytes con el puntero a su tabla de métodos, así que los atributos arrancan en
+el desplazamiento 4.
+
+El diseño del lenguaje intermedio, los esquemas de traducción de cada
+construcción y los supuestos tomados están en
+[`CODIGO_INTERMEDIO.md`](CODIGO_INTERMEDIO.md).
 
 ---
 
