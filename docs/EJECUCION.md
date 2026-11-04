@@ -94,6 +94,11 @@ Resultado: 1 error(es).
 | `--frames` | Imprime el registro de activación de cada rutina |
 | `--run`, `-r` | **Ejecuta** el código intermedio en la máquina virtual |
 | `--sin-chequeos` | No emite las comprobaciones de rango al indexar |
+| `--mips` | Imprime el ensamblador MIPS |
+| `--mips-out ARCHIVO` | Escribe el ensamblador en un `.asm` para MARS o SPIM |
+| `--run-mips`, `-r` | **Ejecuta** el ensamblador en el emulador incluido |
+| `--sim` | Ejecuta el ensamblador en MARS o SPIM |
+| `--regs` | Estadísticas del asignador de registros |
 
 **Código de salida:** `0` si el programa es válido, `1` si hay errores, `2` si
 no se encontró el archivo. Las advertencias no cambian el código de salida, lo
@@ -131,6 +136,40 @@ python -m compiscript programa.cps --tac-out programa.tac
 
 # Ver la distribucion del marco de cada rutina
 python -m compiscript programa.cps --frames
+```
+
+### Código máquina
+
+```bash
+# Ver el ensamblador MIPS
+python -m compiscript programa.cps --mips
+
+# Ejecutarlo en el emulador incluido
+python -m compiscript programa.cps --run-mips
+
+# Guardarlo para abrirlo en MARS o SPIM
+python -m compiscript programa.cps --mips-out programa.asm
+
+# Ver que hizo getReg()
+python -m compiscript programa.cps --regs
+```
+
+### Ejecutar en un simulador externo
+
+MARS y SPIM no vienen con el proyecto. Si tienes MARS (un `.jar`, necesita
+Java):
+
+```bash
+export MARS_JAR=/ruta/Mars4_5.jar        # o colocalo en tools/
+python -m compiscript programa.cps --sim
+```
+
+O directamente:
+
+```bash
+python -m compiscript programa.cps --mips-out programa.asm
+java -jar Mars4_5.jar nc programa.asm    # MARS
+spim -file programa.asm                  # SPIM
 ```
 
 ---
@@ -175,7 +214,7 @@ repositorio.
 ## 5. Batería de tests
 
 ```bash
-python -m pytest tests/            # las 364 pruebas
+python -m pytest tests/            # las 741 pruebas
 python -m pytest tests/ -v         # con el nombre de cada una
 ```
 
@@ -192,6 +231,8 @@ python -m pytest tests/ -m generales   # generales y avisos (E7xx, W9xx)
 python -m pytest tests/ -m tabla       # tabla de simbolos
 python -m pytest tests/ -m tac         # codigo intermedio (fase 2)
 python -m pytest tests/ -m vm          # ejecucion del codigo intermedio
+python -m pytest tests/ -m mips        # codigo maquina (fase 3)
+python -m pytest tests/ -m simulador   # ejecucion del ensamblador
 ```
 
 ### Cobertura

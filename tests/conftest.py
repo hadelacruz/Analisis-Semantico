@@ -123,6 +123,66 @@ def instrucciones(source: str, op: str) -> list:
     return [q for q in tac_de(source).instructions if q.op.value == op]
 
 
+# ---------------------------------------------------------------------------
+# Ayudantes de la fase de codigo maquina (MIPS)
+# ---------------------------------------------------------------------------
+
+def compilar_mips(source: str) -> AnalysisResult:
+    """Compila hasta MIPS y exige que todo el camino haya ido bien."""
+    result = compilar(source)
+    assert result.mips is not None, "no se genero codigo MIPS"
+    return result
+
+
+def mips_de(source: str) -> str:
+    """El ensamblador MIPS de un fragmento valido."""
+    return compilar_mips(source).mips_text()
+
+
+def ejecutar_mips(source: str) -> list[str]:
+    """Compila a MIPS y lo ejecuta en el emulador; devuelve lo impreso."""
+    salida, fallo = compilar_mips(source).run_mips()
+    assert fallo is None, f"la ejecucion del MIPS se interrumpio: {fallo}"
+    return salida
+
+
+def ejecutar_mips_con_fallo(source: str) -> str:
+    """Compila a MIPS esperando que la ejecucion aborte."""
+    _, fallo = compilar_mips(source).run_mips()
+    assert fallo is not None, "se esperaba que la ejecucion abortara"
+    return fallo
+
+
+def instrucciones_mips(source: str) -> list[str]:
+    """Las instrucciones del .asm, sin comentarios ni directivas."""
+    salida = []
+    for linea in mips_de(source).splitlines():
+        cuerpo = linea.split("#")[0].strip()
+        if not cuerpo or cuerpo.endswith(":") or cuerpo.startswith("."):
+            continue
+        salida.append(cuerpo)
+    return salida
+
+
+def rutina_mips(asm: str, etiqueta: str) -> list[str]:
+    """Instrucciones de una rutina concreta del ensamblador.
+
+    El generador separa cada rutina con una linea de ``# ====``, que es lo
+    que marca donde termina.
+    """
+    lineas = asm.splitlines()
+    inicio = next(i for i, l in enumerate(lineas) if l.strip() == f"{etiqueta}:")
+    cuerpo = []
+    for linea in lineas[inicio + 1:]:
+        if linea.startswith("# =="):
+            break
+        limpia = linea.split("#")[0].strip()
+        if not limpia or limpia.endswith(":") or limpia.startswith("."):
+            continue
+        cuerpo.append(limpia)
+    return cuerpo
+
+
 def expected_annotations(source: str) -> set[tuple[int, str]]:
     """Pares ``(linea, codigo)`` anotados con ``@error`` / ``@warning``."""
     found: set[tuple[int, str]] = set()

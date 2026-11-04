@@ -37,4 +37,6 @@ markers = [
     "tabla: tabla de simbolos y entornos",
     "tac: generacion de codigo intermedio (fase 2)",
     "vm: ejecucion del codigo intermedio",
+    "mips: generacion de codigo maquina (fase 3)",
+    "simulador: ejecucion del ensamblador MIPS",
 ]

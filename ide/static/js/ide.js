@@ -107,6 +107,7 @@ print("Total: " + total(carrito));
     conectarInterfaz();
     cargarEjemplos();
     cargarReglas();
+    detectarSimulador();
     analizar();
   });
 
@@ -143,6 +144,7 @@ print("Total: " + total(carrito));
     pintarSimbolos(resultado.symbols);
     pintarTokens(resultado.tokens);
     pintarTac(resultado.tac);
+    pintarMips(resultado.mips);
     pintarSalida(resultado, ms);
 
     const errores = resultado.errorCount;
@@ -828,6 +830,24 @@ print("Total: " + total(carrito));
     }
   }
 
+  // El simulador externo (MARS o SPIM) no se distribuye con el proyecto:
+  // la opcion se habilita solo si el servidor lo encuentra instalado.
+  let simuladorExterno = null;
+
+  async function detectarSimulador() {
+    try {
+      const datos = await (await fetch("/api/simulador")).json();
+      if (!datos.disponible) return;
+      simuladorExterno = datos.nombre;
+      const opcion = $("opt-simulador");
+      opcion.disabled = false;
+      opcion.textContent = "en " + datos.nombre;
+      opcion.title = datos.ruta || "";
+    } catch (_) {
+      /* sin simulador externo, se queda deshabilitada */
+    }
+  }
+
   async function ejecutar() {
     if (!editor) return;
     seleccionarPestana("ejecucion");
@@ -835,15 +855,28 @@ print("Total: " + total(carrito));
     consola.textContent = "Ejecutando...";
     ponerEstado("Ejecutando...", "trabajando");
 
+    const destino = $("sel-destino").value;
+    const externo = destino === "simulador";
+
     try {
-      const respuesta = await fetch("/api/ejecutar", {
+      const respuesta = await fetch(externo ? "/api/simulador" : "/api/ejecutar", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ codigo: editor.getValue() })
+        body: JSON.stringify({ codigo: editor.getValue(), destino: destino })
       });
       const datos = await respuesta.json();
       const lineas = datos.salida || [];
-      let texto = lineas.length ? lineas.join("\n") : "(el programa no imprimio nada)";
+      let etiqueta;
+      if (externo) {
+        etiqueta = (datos.simulador || simuladorExterno || "el simulador externo") +
+          " (simulador independiente)";
+      } else if (datos.destino === "tac") {
+        etiqueta = "la maquina virtual del codigo intermedio";
+      } else {
+        etiqueta = "el emulador de MIPS";
+      }
+      let texto = "> ejecutando en " + etiqueta + "\n\n";
+      texto += lineas.length ? lineas.join("\n") : "(el programa no imprimio nada)";
       if (datos.error) {
         texto += "\n\n>> " + datos.error;
         ponerEstado("Ejecucion interrumpida", "fallo");
@@ -861,6 +894,72 @@ print("Total: " + total(carrito));
   function seleccionarPestana(vista) {
     const boton = document.querySelector('.pestana[data-vista="' + vista + '"]');
     if (boton) boton.click();
+  }
+
+
+  // =========================================================================
+  // Codigo MIPS
+  // =========================================================================
+  function pintarMips(mips) {
+    const contenedor = $("mips");
+    if (!mips) {
+      contenedor.innerHTML =
+        '<div class="vacio">El codigo MIPS se genera cuando el programa ' +
+        "compila sin errores.</div>";
+      $("metricas-mips").textContent = "";
+      return;
+    }
+
+    const filtro = $("filtro-mips").value.trim().toLowerCase();
+    const lineas = mips.text.split("\n");
+
+    // El filtro aisla una rutina: desde su etiqueta hasta la siguiente.
+    let visibles = lineas;
+    if (filtro) {
+      const inicio = lineas.findIndex(
+        (l) => /^[A-Za-z_]/.test(l) && l.trim().endsWith(":") &&
+               l.toLowerCase().includes(filtro)
+      );
+      if (inicio >= 0) {
+        let fin = inicio + 1;
+        while (fin < lineas.length && !(/^[A-Za-z_]/.test(lineas[fin]) &&
+               lineas[fin].trim().endsWith(":"))) fin++;
+        visibles = lineas.slice(inicio, fin);
+      }
+    }
+
+    contenedor.innerHTML = visibles
+      .map((linea) => {
+        const limpia = linea.trimStart();
+        let clase = "";
+        if (limpia.startsWith("#")) clase = "asm-comentario";
+        else if (limpia.startsWith(".")) clase = "asm-directiva";
+        else if (/^[A-Za-z_][\w.]*:/.test(limpia)) clase = "asm-etiqueta";
+
+        const corte = linea.indexOf("#");
+        if (corte > 0 && !clase) {
+          return (
+            '<span class="asm-linea">' + escapar(linea.slice(0, corte)) +
+            '<span class="asm-nota">' + escapar(linea.slice(corte)) + "</span></span>"
+          );
+        }
+        return '<span class="asm-linea ' + clase + '">' + escapar(linea) + "</span>";
+      })
+      .join("");
+
+    $("metricas-mips").textContent =
+      mips.instructions + " instr MIPS \u00b7 " + mips.stats.aciertos + "% en registro";
+  }
+
+  function descargarAsm() {
+    if (!ultimoResultado || !ultimoResultado.mips) return;
+    const enlace = document.createElement("a");
+    enlace.href = URL.createObjectURL(
+      new Blob([ultimoResultado.mips.text], { type: "text/plain" })
+    );
+    enlace.download = ($("nombre-archivo").textContent || "programa").replace(/\.cps$/, "") + ".asm";
+    enlace.click();
+    URL.revokeObjectURL(enlace.href);
   }
 
   // =========================================================================
@@ -954,6 +1053,19 @@ print("Total: " + total(carrito));
   function conectarInterfaz() {
     $("btn-compilar").addEventListener("click", analizar);
     $("btn-ejecutar").addEventListener("click", ejecutar);
+    $("sel-destino").addEventListener("change", ejecutar);
+
+    // Codigo MIPS
+    $("filtro-mips").addEventListener("input", () => {
+      if (ultimoResultado) pintarMips(ultimoResultado.mips);
+    });
+    $("btn-mips-copiar").addEventListener("click", () => {
+      if (!ultimoResultado || !ultimoResultado.mips) return;
+      navigator.clipboard.writeText(ultimoResultado.mips.text);
+      $("btn-mips-copiar").textContent = "Copiado";
+      setTimeout(() => ($("btn-mips-copiar").textContent = "Copiar"), 1200);
+    });
+    $("btn-mips-descargar").addEventListener("click", descargarAsm);
 
     // Codigo intermedio: los tres controles repintan sin volver a compilar.
     ["chk-tac-numerar", "chk-tac-comentarios"].forEach((id) =>

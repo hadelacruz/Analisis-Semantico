@@ -33,6 +33,9 @@ from .generated.CompiscriptLexer import CompiscriptLexer
 from .generated.CompiscriptParser import CompiscriptParser
 from .scope import SymbolTable
 from .syntax import parse_source
+from .mips import MipsGenerator, MipsProgram
+from .mips.emulator import MipsError
+from .mips.emulator import run as run_mips_emulator
 from .tac import TACProgram, generate_tac
 from .tac.validator import TACIssue, validate as validate_tac
 from .tac.vm import TACAbort, TACVirtualMachine
@@ -58,6 +61,12 @@ class AnalysisResult:
     tac: Optional[TACProgram] = None
     #: Problemas estructurales detectados en el código generado.
     tac_issues: list[TACIssue] = field(default_factory=list)
+
+    # --- fase de generación de código máquina ------------------------------
+    #: Programa en ensamblador MIPS; ``None`` si no se generó.
+    mips: Optional[MipsProgram] = None
+    #: Estadísticas del asignador de registros.
+    mips_stats: dict = field(default_factory=dict)
 
     # -- consultas rápidas --------------------------------------------------
     @property
@@ -147,6 +156,41 @@ class AnalysisResult:
         except TACAbort as fallo:
             return maquina.output, str(fallo)
 
+    def mips_text(self) -> str:
+        """El ensamblador MIPS completo, listo para MARS o SPIM."""
+        return self.mips.render() if self.mips else ""
+
+    def mips_dict(self) -> Optional[dict]:
+        if self.mips is None:
+            return None
+        texto = self.mips.render()
+        return {
+            "text": texto,
+            "lines": len(texto.splitlines()),
+            "instructions": self.mips.instruction_count,
+            "stats": self.mips_stats,
+        }
+
+    def run_mips(self, *, max_pasos: int = 20_000_000) -> tuple[list[str], Optional[str]]:
+        """Ejecuta el ensamblador en el emulador propio.
+
+        Devuelve ``(lineas_impresas, error)``.
+        """
+        if self.mips is None:
+            return [], "no hay codigo MIPS que ejecutar"
+        try:
+            return run_mips_emulator(self.mips.render(), max_pasos=max_pasos), None
+        except MipsError as fallo:
+            return [], str(fallo)
+
+    def run_mips_simulador(self, **kwargs) -> tuple[list[str], Optional[str]]:
+        """Ejecuta el ensamblador en MARS o SPIM, si estan instalados."""
+        from .mips.simulator import ejecutar_en_simulador
+
+        if self.mips is None:
+            return [], "no hay codigo MIPS que ejecutar"
+        return ejecutar_en_simulador(self.mips.render(), **kwargs)
+
     def symbols_dict(self) -> Optional[dict]:
         return self.symbol_table.to_dict() if self.symbol_table else None
 
@@ -191,6 +235,7 @@ class AnalysisResult:
             "symbols": self.symbols_dict(),
             "tokens": self.tokens_list(),
             "tac": self.tac_dict(),
+            "mips": self.mips_dict(),
         }
 
     def format_diagnostics(self) -> str:
@@ -225,6 +270,7 @@ def analyze(
     *,
     intermediate: bool = True,
     bounds_checks: bool = True,
+    machine: bool = True,
 ) -> AnalysisResult:
     """Analiza ``source`` y devuelve el resultado completo del front-end.
 
@@ -272,6 +318,12 @@ def analyze(
                 bounds_checks=bounds_checks,
             )
             result.tac_issues = validate_tac(result.tac)
+
+            # --- fase 4: codigo maquina (MIPS) ---------------------------
+            if machine and not result.tac_issues:
+                generador = MipsGenerator(result.tac, checker.table)
+                result.mips = generador.generate()
+                result.mips_stats = generador.estadisticas()
         except Exception as exc:  # pragma: no cover - red de seguridad
             reporter.error(
                 "E002",

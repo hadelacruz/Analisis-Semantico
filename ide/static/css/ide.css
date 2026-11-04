@@ -669,3 +669,25 @@ table.rejilla tr:hover td { background: var(--fondo-3); }
 
 .consola .ok { color: var(--ok); }
 .consola .fallo { color: var(--error); }
+
+/* --- codigo MIPS ----------------------------------------------------------- */
+
+#mips {
+  padding: 8px 4px 12px;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  line-height: 1.5;
+}
+
+.asm-linea {
+  display: block;
+  padding: 0 10px;
+  white-space: pre;
+}
+.asm-linea:hover { background: var(--fondo-3); }
+
+.asm-comentario { color: var(--texto-3); font-style: italic; }
+.asm-etiqueta   { color: var(--naranja); font-weight: 700; }
+.asm-directiva  { color: var(--violeta); }
+.asm-op         { color: var(--acento); }
+.asm-nota       { color: var(--texto-3); font-style: italic; }

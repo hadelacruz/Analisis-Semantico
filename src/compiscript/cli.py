@@ -86,6 +86,20 @@ def _print_summary(result: AnalysisResult, color: bool) -> None:
         )
 
 
+def _regs_text(result: AnalysisResult, color: bool) -> str:
+    """Resumen de lo que hizo getReg()."""
+    datos = result.mips_stats
+    if not datos:
+        return "  (no se genero codigo maquina)"
+    return (
+        f"  valores servidos desde un registro : {datos.get('reutilizaciones', 0)}\n"
+        f"  cargas desde memoria               : {datos.get('cargas', 0)}\n"
+        f"  volcados por falta de registros    : {datos.get('volcados', 0)}\n"
+        f"  tasa de acierto                    : {datos.get('aciertos', 0)}%\n"
+        f"  instrucciones MIPS emitidas        : {datos.get('instrucciones', 0)}"
+    )
+
+
 def _tac_summary(result: AnalysisResult) -> str:
     """Una linea con las metricas del codigo intermedio generado."""
     programa = result.tac
@@ -125,7 +139,7 @@ def build_parser() -> argparse.ArgumentParser:
         prog="compiscript",
         description=(
             "Compilador de Compiscript: analisis sintactico, analisis "
-            "semantico y generacion de codigo intermedio (TAC)."
+            "semantico, codigo intermedio (TAC) y codigo maquina (MIPS)."
         ),
     )
     parser.add_argument("archivo", help="archivo fuente .cps a analizar")
@@ -172,6 +186,26 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--sin-chequeos", action="store_true",
         help="no emite las comprobaciones de rango al indexar arreglos",
+    )
+    parser.add_argument(
+        "--mips", action="store_true",
+        help="imprime el codigo ensamblador MIPS",
+    )
+    parser.add_argument(
+        "--mips-out", metavar="ARCHIVO",
+        help="escribe el ensamblador en un archivo .asm para MARS o SPIM",
+    )
+    parser.add_argument(
+        "--run-mips", action="store_true",
+        help="ejecuta el ensamblador en el emulador incluido",
+    )
+    parser.add_argument(
+        "--sim", action="store_true",
+        help="ejecuta el ensamblador en MARS o SPIM (hay que tenerlos instalados)",
+    )
+    parser.add_argument(
+        "--regs", action="store_true",
+        help="estadisticas del asignador de registros",
     )
     parser.add_argument("--json", action="store_true", help="emite el resultado completo en JSON")
     parser.add_argument("--quiet", "-q", action="store_true", help="solo el codigo de salida")
@@ -256,12 +290,48 @@ def main(argv: list[str] | None = None) -> int:
             if fallo:
                 print(_paint(f"  Abortado: {fallo}", "red", color))
 
+        if args.mips:
+            print()
+            print(_paint("== CODIGO MIPS ==", "cyan", color))
+            if result.mips is None:
+                print(_paint("  (no se genero: el programa tiene errores)", "dim", color))
+            else:
+                print(result.mips_text())
+
+        if args.regs:
+            print()
+            print(_paint("== ASIGNACION DE REGISTROS ==", "cyan", color))
+            print(_regs_text(result, color))
+
+        if args.run_mips:
+            print()
+            print(_paint("== EJECUCION DEL MIPS (emulador incluido) ==", "cyan", color))
+            salida, fallo = result.run_mips()
+            for linea in salida:
+                print("  " + linea)
+            if fallo:
+                print(_paint(f"  Abortado: {fallo}", "red", color))
+
+        if args.sim:
+            print()
+            print(_paint("== EJECUCION DEL MIPS (simulador externo) ==", "cyan", color))
+            salida, fallo = result.run_mips_simulador()
+            for linea in salida:
+                print("  " + linea)
+            if fallo:
+                print(_paint(f"  {fallo}", "yellow", color))
+
     if args.tac_out:
         Path(args.tac_out).write_text(
             result.tac_text(numbered=args.tac_numerado), encoding="utf-8"
         )
         if not args.quiet:
             print(f"Codigo intermedio escrito en {args.tac_out}")
+
+    if args.mips_out:
+        Path(args.mips_out).write_text(result.mips_text(), encoding="utf-8")
+        if not args.quiet:
+            print(f"Ensamblador MIPS escrito en {args.mips_out}")
 
     if args.dot:
         Path(args.dot).write_text(

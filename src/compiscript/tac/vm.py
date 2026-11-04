@@ -403,7 +403,9 @@ class TACVirtualMachine:
             self.output.append(self._format(args[0]))
             return None
         if name == rt.CONCAT.name:
-            return f"{args[0]}{args[1]}"
+            # Se formatean los dos lados: una variable de tipo 'string' puede
+            # valer null, y entonces se concatena como "null".
+            return f"{self._format(args[0])}{self._format(args[1])}"
         if name == rt.TO_STRING.name:
             return self._format(args[0])
         if name == rt.ALLOC.name:

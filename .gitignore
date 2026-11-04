@@ -19,6 +19,14 @@ dist/
 *.dot
 salida/
 arbol.svg
+*.asm
+*.tac
+
+# Simuladores de MIPS: se instalan aparte, no se distribuyen con el proyecto.
+# El compilador los busca en la raiz, en tools/ o en la variable MARS_JAR.
+Mars*.jar
+mars*.jar
+tools/*.jar
 
 # Editores / SO
 .vscode/

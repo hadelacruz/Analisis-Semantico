@@ -73,8 +73,53 @@ def api_ejecutar():
             }
         )
 
-    salida, fallo = resultado.run()
-    return jsonify({"ok": fallo is None, "salida": salida, "error": fallo})
+    destino = payload.get("destino", "mips")
+    if destino == "tac":
+        salida, fallo = resultado.run()
+    else:
+        salida, fallo = resultado.run_mips()
+    return jsonify(
+        {"ok": fallo is None, "salida": salida, "error": fallo, "destino": destino}
+    )
+
+
+@app.post("/api/simulador")
+def api_simulador():
+    """Ejecuta el ensamblador en MARS o SPIM, si estan instalados."""
+    from compiscript.mips.simulator import buscar_simulador
+
+    payload = request.get_json(silent=True) or {}
+    resultado = analyze(payload.get("codigo", ""), filename="editor.cps")
+    if not resultado.ok:
+        return jsonify(
+            {"ok": False, "salida": [], "error": "El programa tiene errores.", "simulador": None}
+        )
+
+    simulador = buscar_simulador()
+    salida, fallo = resultado.run_mips_simulador()
+    return jsonify(
+        {
+            "ok": fallo is None,
+            "salida": salida,
+            "error": fallo,
+            "simulador": simulador.nombre if simulador else None,
+        }
+    )
+
+
+@app.get("/api/simulador")
+def api_simulador_disponible():
+    """Si hay un simulador externo instalado, para habilitar la opcion."""
+    from compiscript.mips.simulator import buscar_simulador
+
+    simulador = buscar_simulador()
+    return jsonify(
+        {
+            "disponible": simulador is not None,
+            "nombre": simulador.nombre if simulador else None,
+            "ruta": simulador.ruta if simulador else None,
+        }
+    )
 
 
 @app.get("/api/reglas")

@@ -3,10 +3,13 @@
 Documento de diseño del compilador: cómo está organizado, por qué se tomó cada
 decisión y qué supuestos se hicieron sobre el lenguaje.
 
-Cubre las tres fases implementadas: análisis **léxico y sintáctico** (ANTLR),
-análisis **semántico** (visitor propio) y generación de **código intermedio**
-(TAC). El diseño del lenguaje intermedio tiene documento aparte:
-[`CODIGO_INTERMEDIO.md`](CODIGO_INTERMEDIO.md).
+Cubre las cuatro fases implementadas: análisis **léxico y sintáctico**
+(ANTLR), análisis **semántico** (visitor propio), generación de **código
+intermedio** (TAC) y generación de **código máquina** (MIPS).
+
+Dos de ellas tienen documento aparte por su extensión:
+[`CODIGO_INTERMEDIO.md`](CODIGO_INTERMEDIO.md) y
+[`CODIGO_MIPS.md`](CODIGO_MIPS.md).
 
 ---
 
@@ -61,8 +64,22 @@ diagnósticos** y una **tabla de símbolos**. La generación de código intermed
         │  TACVirtualMachine  ejecuta y prueba  │
         └───────────────────┬───────────────────┘
                             │
+        │  TACProgram validado
+        ┌───────────────────▼───────────────────┐
+        │  PASADA 4 · MipsGenerator             │
+        │  · getReg() con descriptores y spill  │
+        │  · prologo y epilogo de cada rutina   │
+        │  · representacion fisica de los datos │
+        │  · biblioteca de apoyo en ensamblador │
+        └───────────────────┬───────────────────┘
+                            │  programa .asm
+        ┌───────────────────▼───────────────────┐
+        │  MipsEmulator   ejecuta y comprueba   │
+        │  MARS / SPIM    simulador externo     │
+        └───────────────────┬───────────────────┘
+                            │
                      AnalysisResult
-         (diagnosticos + tabla + arbol + codigo intermedio)
+      (diagnosticos + tabla + arbol + TAC + ensamblador MIPS)
                    │              │
               ┌────▼────┐    ┌────▼────┐
               │   CLI   │    │   IDE   │
@@ -97,6 +114,12 @@ divergir.
 | `tac/generator.py` | Pasada 3. Traduce el árbol anotado a código de tres direcciones. |
 | `tac/validator.py` | Invariantes del código generado (`T001`–`T010`). |
 | `tac/vm.py` | Máquina virtual que ejecuta el TAC. |
+| `mips/asm.py` | Representación del `.asm`: secciones y renderizado. |
+| `mips/registers.py` | **`getReg()`**: descriptores, reutilización y *spilling*. |
+| `mips/generator.py` | Pasada 4. Traduce el TAC a ensamblador MIPS. |
+| `mips/runtime.py` | Biblioteca de apoyo escrita en MIPS. |
+| `mips/emulator.py` | Emulador que ejecuta el `.asm` generado. |
+| `mips/simulator.py` | Integración con MARS o SPIM si están instalados. |
 
 ---
 
@@ -365,6 +388,34 @@ el desplazamiento 4.
 El diseño del lenguaje intermedio, los esquemas de traducción de cada
 construcción y los supuestos tomados están en
 [`CODIGO_INTERMEDIO.md`](CODIGO_INTERMEDIO.md).
+
+---
+
+## 6ter. La cuarta pasada: código máquina
+
+La fase de MIPS **no necesitó cambiar nada** de las anteriores, y eso era el
+objetivo de haber guardado desde la fase 1 el almacenamiento, el
+desplazamiento, el tamaño y la etiqueta de cada símbolo, y de haber añadido en
+la fase 2 el registro de activación completo.
+
+Lo que sí hubo que decidir aquí es la **representación física** de los datos,
+que la máquina virtual del TAC permitía dejar abstracta: cuántos bytes ocupa
+un doble, cómo se guarda una cadena, qué es `null` en memoria.
+
+Las tres piezas:
+
+| Pieza | Qué resuelve |
+| --- | --- |
+| `registers.py` | Repartir 16 registros enteros y 14 flotantes entre temporales ilimitados, volcando a la pila cuando faltan |
+| `generator.py` | Prólogo, epílogo y traducción instrucción a instrucción |
+| `runtime.py` | Las nueve rutinas de apoyo, escritas una sola vez en ensamblador |
+
+Y dos para validarlo: `emulator.py`, que ejecuta el `.asm` generado dentro de
+la batería de tests, y `simulator.py`, que lo lanza en MARS o SPIM cuando
+están instalados.
+
+El diseño completo —convenio de llamada, algoritmo de `getReg()`, mapa de
+instrucciones y supuestos— está en [`CODIGO_MIPS.md`](CODIGO_MIPS.md).
 
 ---
 

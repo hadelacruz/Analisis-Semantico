@@ -1,20 +1,20 @@
 # 🧪 Compiscript — Compilador
 
-Compilador para **Compiscript**, un subconjunto de TypeScript. Cubre el
-análisis **léxico**, **sintáctico** y **semántico**, construye una **tabla de
-símbolos** con manejo de entornos y registros de activación, genera **código
-intermedio de tres direcciones (TAC)** y trae un **IDE web** para escribir,
-compilar y **ejecutar** código.
+Compilador **completo** para **Compiscript**, un subconjunto de TypeScript.
+Va del código fuente al **ensamblador MIPS ejecutable**, pasando por análisis
+semántico con tabla de símbolos y código intermedio de tres direcciones. Trae
+un **IDE web** para escribir, compilar y **ejecutar** código.
 
 ```
-programa.cps  ──►  ANTLR  ──►  Analisis semantico  ──►  TAC  ──►  [MIPS]
-                  lexer+parser    tipos, ambitos       codigo de     fase
-                                  tabla de simbolos    3 direcciones futura
+programa.cps ──► ANTLR ──► Analisis semantico ──► TAC ──► MIPS ──► simulador
+                lexer      tipos, ambitos        codigo   getReg()  MARS/SPIM
+                parser     tabla de simbolos     de 3     marcos    o el
+                                                 direcc.  de pila   incluido
 ```
 
-> Fases 1 y 2 del proyecto de Compiladores. Análisis léxico y sintáctico con
-> **ANTLR 4.13.1**; análisis semántico y generación de código intermedio
-> implementados sobre *Visitors* en Python.
+> Proyecto de Compiladores, las tres entregas. Análisis léxico y sintáctico
+> con **ANTLR 4.13.1**; análisis semántico, código intermedio y generación de
+> MIPS implementados sobre *Visitors* en Python.
 
 ---
 
@@ -42,6 +42,13 @@ python -m compiscript mi_programa.cps --tac
 
 # Ejecutarlo en la máquina virtual del TAC
 python -m compiscript mi_programa.cps --run
+
+# Ver el ensamblador MIPS y ejecutarlo
+python -m compiscript mi_programa.cps --mips
+python -m compiscript mi_programa.cps --run-mips
+
+# Guardarlo para abrirlo en MARS o SPIM
+python -m compiscript mi_programa.cps --mips-out programa.asm
 
 # Levantar el IDE  ->  http://127.0.0.1:5000
 python ide/app.py
@@ -81,7 +88,8 @@ docker run --rm -v "$(pwd):/trabajo" compiscript cli /trabajo/programa.cps
 | **Árbol sintáctico** | Dos vistas — **Indentado** (jerárquico plegable) y **Gráfico** (nodos y aristas en SVG con zoom, desplazamiento y salto a la línea al hacer clic) — y dos niveles de detalle: **Compacto** (por defecto; colapsa la cascada de precedencia de ANTLR, ~55 % menos nodos) y **Completo**. Cada expresión muestra su **tipo inferido** |
 | **Tabla de símbolos** | Ámbitos anidados con tipo, categoría, almacenamiento, offset, tamaño y capturas de closures |
 | **Código intermedio** | El TAC generado, con numeración opcional y filtro por rutina |
-| **Ejecución** | La salida real del programa, ejecutado sobre el TAC |
+| **Código MIPS** | El ensamblador generado, con filtro por rutina y descarga del `.asm` |
+| **Ejecución** | La salida real del programa, en MIPS o en el TAC |
 | **Tokens** | Volcado del flujo léxico |
 | **Reglas** | Catálogo consultable de las 53 reglas semánticas implementadas |
 
@@ -118,10 +126,17 @@ Analisis-Semantico/
 │   │   ├── generator.py          PASADA 3 — Compiscript → TAC
 │   │   ├── validator.py          invariantes del código generado
 │   │   └── vm.py                 máquina virtual que ejecuta el TAC
+│   ├── mips/                     FASE 3 — código máquina
+│   │   ├── asm.py                secciones .data / .text y renderizado
+│   │   ├── registers.py          getReg() con descriptores y spilling
+│   │   ├── generator.py          PASADA 4 — TAC → MIPS
+│   │   ├── runtime.py            biblioteca de apoyo en ensamblador
+│   │   ├── emulator.py           emulador que ejecuta el .asm generado
+│   │   └── simulator.py          integración con MARS / SPIM
 │   ├── analysis.py               orquestador (API pública)
 │   └── cli.py                    línea de comandos
 ├── ide/                          IDE web (Flask + Monaco)
-├── tests/                        batería de 571 tests
+├── tests/                        batería de 741 tests
 │   └── programs/{valid,invalid}  programas .cps completos
 ├── docs/                         documentación de arquitectura y ejecución
 └── tools/generate_parser.py      regeneración del parser desde la gramática
@@ -137,6 +152,7 @@ Analisis-Semantico/
 | [`docs/EJECUCION.md`](docs/EJECUCION.md) | Cómo instalar, ejecutar, regenerar el parser y usar el IDE |
 | [`docs/REGLAS_SEMANTICAS.md`](docs/REGLAS_SEMANTICAS.md) | Las 53 reglas con su código, ejemplo del error y test que la cubre |
 | [`docs/CODIGO_INTERMEDIO.md`](docs/CODIGO_INTERMEDIO.md) | **Diseño del lenguaje intermedio**: repertorio de instrucciones, modelo de memoria, registros de activación, esquemas de traducción y supuestos |
+| [`docs/CODIGO_MIPS.md`](docs/CODIGO_MIPS.md) | **Generación de código máquina**: convenio de llamada, `getReg()`, biblioteca de apoyo y cómo ejecutarlo en un simulador |
 | [`docs/GUION_DEMO.md`](docs/GUION_DEMO.md) | Guion de la demostración, con el mapa paso → requerimiento de la rúbrica |
 
 ---
@@ -155,7 +171,7 @@ Analisis-Semantico/
 | 2.6 | Listas y estructuras | `checker.py` + reglas `E6xx` |
 | 2.7 | Generales (código muerto, duplicados…) | `checker.py` + reglas `E7xx` / `W9xx` |
 | 3 | Recorrido con Visitor de ANTLR | `checker.py` (`CompiscriptVisitor`) |
-| 4 | Batería de tests de casos exitosos y fallidos | `tests/` — 571 tests |
+| 4 | Batería de tests de casos exitosos y fallidos | `tests/` — 741 tests |
 | 5 | Tabla de símbolos con entornos | `symbols.py`, `scope.py` |
 | 6 | IDE | `ide/` |
 | 7 | Documentación | `docs/` |
@@ -180,6 +196,31 @@ Extras que no pedía el enunciado pero respaldan la corrección de la traducció
 | --- | --- |
 | `tac/validator.py` | Comprueba 10 invariantes del código generado; aporta los *casos fallidos* de la batería |
 | `tac/vm.py` | **Ejecuta** el TAC: los tests verifican que `factorial(5)` da `120`, no sólo que el código "se parezca" |
+
+---
+
+### Fase 3 — Generación de código máquina
+
+| Requerimiento del enunciado | Dónde está |
+| --- | --- |
+| **Secuencias de llamada y retorno** | `mips/generator.py` — `_prologo`, `_epilogo`, `_t_call` |
+| **Algoritmo de asignación de registros (`getReg()`)** | `mips/registers.py` |
+| **MIPS funcional, ejecutado en un simulador** | `mips/runtime.py`, `mips/emulator.py`, `mips/simulator.py` — verificado en **MARS 4.5** |
+| Batería de tests | `tests/test_mips_*.py` — 170 pruebas |
+| IDE que compile el código del usuario | pestaña *Código MIPS* y botón *Ejecutar* |
+| Documentación de la arquitectura y de la ejecución | [`CODIGO_MIPS.md`](docs/CODIGO_MIPS.md), [`EJECUCION.md`](docs/EJECUCION.md) |
+
+La prueba más fuerte de que la traducción es correcta: **el mismo programa
+ejecutado en la máquina virtual del TAC, en el emulador de MIPS y en MARS 4.5
+produce la misma salida, línea por línea**, en los ocho programas completos del
+repositorio (incluido el ejemplo que entregó el curso).
+
+MARS importa porque es el único de los tres que **no se escribió aquí**: el
+generador y el emulador comparten autor, así que un malentendido compartido
+sobre una instrucción pasaría los dos filtros. Pasar por un simulador externo
+descubrió tres fallos que la batería propia no veía —dos de alineación y uno de
+modo de redondeo—; están documentados en
+[`CODIGO_MIPS.md` §10](docs/CODIGO_MIPS.md).
 
 ---
 
@@ -245,7 +286,7 @@ El detalle de ésta y del resto de decisiones de diseño está en
 ## 🧪 Estado de la batería de tests
 
 ```
-571 passed
+720 passed
 ```
 
 ```bash
@@ -255,9 +296,10 @@ python -m pytest tests/ -m clases          # sólo clases y objetos
 ```
 
 Marcas disponibles: `tipos`, `ambito`, `funciones`, `flujo`, `clases`,
-`listas`, `generales`, `tabla`, `tac`, `vm`.
+`listas`, `generales`, `tabla`, `tac`, `vm`, `mips`, `simulador`.
 
 ```bash
 python -m pytest tests/ -m tac    # solo la fase de codigo intermedio
 python -m pytest tests/ -m vm     # solo la ejecucion del TAC
+python -m pytest tests/ -m mips   # solo la fase de codigo maquina
 ```

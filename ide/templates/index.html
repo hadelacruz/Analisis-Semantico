@@ -24,9 +24,15 @@
       <span>&#9654;</span> Compilar
     </button>
 
-    <button id="btn-ejecutar" class="btn btn-secundario" title="Ejecuta el codigo intermedio (F6)">
+    <button id="btn-ejecutar" class="btn btn-secundario" title="Ejecuta el programa (F6)">
       <span>&#9889;</span> Ejecutar
     </button>
+
+    <select id="sel-destino" class="control" title="Que representacion se ejecuta">
+      <option value="mips">en MIPS</option>
+      <option value="tac">en TAC</option>
+      <option value="simulador" id="opt-simulador" disabled>en MARS/SPIM</option>
+    </select>
 
     <label class="interruptor" title="Analizar mientras se escribe">
       <input type="checkbox" id="chk-auto" checked>
@@ -63,6 +69,7 @@
       <button class="pestana activa" data-vista="arbol">Arbol sintactico</button>
       <button class="pestana" data-vista="simbolos">Tabla de simbolos</button>
       <button class="pestana" data-vista="tac">Codigo intermedio</button>
+      <button class="pestana" data-vista="mips">Codigo MIPS</button>
       <button class="pestana" data-vista="tokens">Tokens</button>
       <button class="pestana" data-vista="reglas">Reglas</button>
     </nav>
@@ -130,6 +137,15 @@
         <div id="tac" class="scroll"></div>
       </div>
 
+      <div class="vista" id="vista-mips">
+        <div class="herramientas">
+          <input type="search" id="filtro-mips" class="control" placeholder="Filtrar rutina...">
+          <button class="btn btn-mini" id="btn-mips-copiar">Copiar</button>
+          <button class="btn btn-mini" id="btn-mips-descargar">Descargar .asm</button>
+        </div>
+        <div id="mips" class="scroll"></div>
+      </div>
+
       <div class="vista" id="vista-tokens">
         <div id="tokens" class="scroll"></div>
       </div>
@@ -177,6 +193,8 @@
   <span id="tiempo" class="meta"></span>
   <span class="separador-estado"></span>
   <span id="metricas-tac" class="meta"></span>
+  <span class="separador-estado"></span>
+  <span id="metricas-mips" class="meta"></span>
   <span class="crece"></span>
   <span class="meta">Compiscript &middot; ANTLR 4.13.1</span>
 </div>
